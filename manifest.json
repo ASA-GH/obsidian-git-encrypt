@@ -1,10 +1,10 @@
 {
-  "id": "git-encrypt",
-  "name": "Git Encrypt",
-  "version": "1.0.0",
-  "minAppVersion": "0.15.0",
-  "description": "Synchronizes notes with GitHub in an encrypted format",
-  "author": "Anton S",
-  "authorUrl": "",
-  "isDesktopOnly": false
+	"id": "git-encrypt",
+	"name": "Git Encrypt",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Synchronizes notes with GitHub in an encrypted format",
+	"author": "ASA-GH",
+	"authorUrl": "",
+	"isDesktopOnly": false
 }

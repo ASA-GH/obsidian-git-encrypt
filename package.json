@@ -5,6 +5,10 @@
 	"description": "Synchronizes notes with GitHub in an encrypted format",
 	"main": "main.js",
 	"type": "module",
+	"packageManager": "npm@11.9.0",
+	"engines": {
+		"node": ">=24.14.0"
+	},
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",

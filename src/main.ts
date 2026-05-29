@@ -1,99 +1,181 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Notice, Plugin, Platform } from "obsidian";
+import {
+	GitEncryptSettingTab,
+	GitEncryptSettings,
+	DEFAULT_SETTINGS,
+} from "./settings";
 
-// Remember to rename these classes and interfaces!
+/**
+ * Main plugin class for Git Encrypt.
+ * Coordinates plugin lifecycle, settings persistence, and desktop-specific native integrations
+ * such as Git environment introspection and external cryptographic key file operations.
+ */
+export default class GitEncryptPlugin extends Plugin {
+	settings: GitEncryptSettings;
+	settingsTab: GitEncryptSettingTab;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
-
-	async onload() {
+	async onload(): Promise<void> {
 		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		this.settingsTab = new GitEncryptSettingTab(this.app, this);
+		this.addSettingTab(this.settingsTab);
 	}
 
-	onunload() {
+	/**
+	 * Loads settings from Obsidian's data.json storage.
+	 * Falls back to default values for missing configuration entries.
+	 */
+	async loadSettings(): Promise<void> {
+		const loadedData = await this.loadData();
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
 	}
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
-	}
-
-	async saveSettings() {
+	/**
+	 * Persists the current plugin settings state into data.json storage.
+	 */
+	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+	/**
+	 * Forces a redrawing of the settings tab view if it is actively open.
+	 */
+	async refreshSettingsTab(): Promise<void> {
+		if (this.settingsTab) {
+			await this.settingsTab.display();
+		}
 	}
 
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
+	/**
+	 * Attempts to locate the absolute path of the global Git SSH private key.
+	 * Inspects `core.sshCommand` first, falling back to testing standard identity file paths.
+	 * Only executes on desktop platforms.
+	 *
+	 * @returns A promise that resolves to the absolute path string, or null if undetected.
+	 */
+	async getGitSshKeyPath(): Promise<string | null> {
+		if (Platform.isMobile) return null;
+
+		try {
+			const { exec } = require("child_process");
+			const { promisify } = require("util");
+			const path = require("path");
+			const fs = require("fs");
+			const os = require("os");
+			const execPromise = promisify(exec);
+
+			const { stdout: sshCommand } = await execPromise(
+				"git config --global core.sshCommand",
+			).catch(() => ({ stdout: "" }));
+
+			if (sshCommand) {
+				const match = sshCommand.match(/-i\s+(\S+)/);
+				if (match && match[1]) return path.resolve(match[1].trim());
+			}
+
+			const homedir = os.homedir();
+			const defaultPaths = [
+				path.join(homedir, ".ssh", "id_rsa"),
+				path.join(homedir, ".ssh", "id_ed25519"),
+				path.join(homedir, ".ssh", "id_ecdsa"),
+			];
+
+			for (const p of defaultPaths) {
+				if (fs.existsSync(p)) return p;
+			}
+			return null;
+		} catch (error) {
+			console.warn("Failed to detect SSH key path from Git:", error);
+			return null;
+		}
 	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	/**
+	 * Retrieves the global Git user configuration signature (name and email).
+	 * Only executes on desktop platforms.
+	 *
+	 * @returns A promise containing the trimmed name and email strings.
+	 */
+	async getGitGlobalUser(): Promise<{ name: string; email: string }> {
+		if (Platform.isMobile) return { name: "", email: "" };
+
+		try {
+			const { exec } = require("child_process");
+			const { promisify } = require("util");
+			const execPromise = promisify(exec);
+
+			const { stdout: nameOut } = await execPromise(
+				"git config --global user.name",
+			).catch(() => ({ stdout: "" }));
+
+			const { stdout: emailOut } = await execPromise(
+				"git config --global user.email",
+			).catch(() => ({ stdout: "" }));
+
+			return {
+				name: nameOut.trim(),
+				email: emailOut.trim(),
+			};
+		} catch (error) {
+			console.warn("Failed to get global git user:", error);
+			return { name: "", email: "" };
+		}
+	}
+
+	/**
+	 * Validates whether an external file contains a compliant 64-character hex encryption key.
+	 * Only executes on desktop platforms.
+	 *
+	 * @param filePath - Path to the file being inspected.
+	 * @returns True if valid file exists and matches specifications, false otherwise.
+	 */
+	async checkMasterKeyFile(filePath: string): Promise<boolean> {
+		if (Platform.isMobile || !filePath) return false;
+
+		try {
+			const fs = require("fs");
+			if (!fs.existsSync(filePath)) return false;
+			const content = fs.readFileSync(filePath, "utf8").trim();
+			return /^[0-9a-fA-F]{64}$/.test(content);
+		} catch (error) {
+			console.warn("Failed to check master key file:", error);
+			return false;
+		}
+	}
+
+	/**
+	 * Generates a cryptographically secure 32-byte master key, encodes it to hex,
+	 * and saves it into the designated external file path with restrictive user permissions.
+	 * Only executes on desktop platforms.
+	 *
+	 * @param filePath - Target location where the key file will be stored.
+	 * @returns The generated 64-character hex string, or null if an error occurs.
+	 */
+	async generateAndSaveMasterKeyFile(
+		filePath: string,
+	): Promise<string | null> {
+		if (Platform.isMobile) return null;
+
+		try {
+			const fs = require("fs");
+			const crypto = require("crypto");
+			const path = require("path");
+
+			const randomBytes = crypto.randomBytes(32);
+			const hex = randomBytes.toString("hex");
+			const dir = path.dirname(filePath);
+
+			if (!fs.existsSync(dir)) {
+				fs.mkdirSync(dir, { recursive: true });
+			}
+
+			fs.writeFileSync(filePath, hex, { mode: 0o600 });
+			return hex;
+		} catch (error) {
+			console.error("Failed to generate or save master key file:", error);
+			const message =
+				error instanceof Error ? error.message : String(error);
+			new Notice(`Master key storage error: ${message}`);
+			return null;
+		}
 	}
 }

@@ -3,7 +3,7 @@ import type GitEncryptPlugin from "../../main";
 
 /**
  * Renders the commit author configuration section.
- * Allows automatic pulling of user name and email from global Git configs on desktop,
+ * Allows automatic pulling of username and email from global Git configs on desktop,
  * and restricts input to strict manual configuration on mobile platforms.
  *
  * @param containerEl - The parent HTML element where the section will be rendered.
@@ -13,11 +13,16 @@ export async function renderAuthorSection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
 ): Promise<void> {
-	containerEl.createEl("h3", { text: "Commit Author" });
+	containerEl.createEl("h3", { text: "Commit author" });
 
-	if (!Platform.isMobile) {
+	if (Platform.isMobile) {
+		if (plugin.settings.authorSource !== "manual") {
+			plugin.settings.authorSource = "manual";
+			await plugin.saveSettings();
+		}
+	} else {
 		new Setting(containerEl)
-			.setName("Author Data Source")
+			.setName("Author data source")
 			.setDesc(
 				"Load identity details from the global Git config or enter them manually.",
 			)
@@ -35,19 +40,14 @@ export async function renderAuthorSection(
 							if (email) plugin.settings.authorEmail = email;
 							await plugin.saveSettings();
 						}
-						plugin.refreshSettingsTab();
+						await plugin.refreshSettingsTab();
 					}),
 			);
-	} else {
-		if (plugin.settings.authorSource !== "manual") {
-			plugin.settings.authorSource = "manual";
-			await plugin.saveSettings();
-		}
 	}
 
 	if (Platform.isMobile || plugin.settings.authorSource === "manual") {
 		new Setting(containerEl)
-			.setName("Author Name")
+			.setName("Author name")
 			.setDesc("The name associated with each generated Git commit.")
 			.addText((text) =>
 				text
@@ -59,7 +59,7 @@ export async function renderAuthorSection(
 			);
 
 		new Setting(containerEl)
-			.setName("Author Email")
+			.setName("Author email")
 			.setDesc(
 				"The email address associated with each generated Git commit.",
 			)
@@ -73,7 +73,7 @@ export async function renderAuthorSection(
 			);
 	} else if (!Platform.isMobile && plugin.settings.authorSource === "git") {
 		new Setting(containerEl)
-			.setName("Author Name (from Git)")
+			.setName("Author name (from Git)")
 			.setDesc(
 				"Read-only identity name pulled from the global Git configuration.",
 			)
@@ -82,7 +82,7 @@ export async function renderAuthorSection(
 			});
 
 		new Setting(containerEl)
-			.setName("Author Email (from Git)")
+			.setName("Author email (from Git)")
 			.setDesc(
 				"Read-only identity email pulled from the global Git configuration.",
 			)
@@ -96,7 +96,7 @@ export async function renderAuthorSection(
 				if (name) plugin.settings.authorName = name;
 				if (email) plugin.settings.authorEmail = email;
 				await plugin.saveSettings();
-				plugin.refreshSettingsTab();
+				await plugin.refreshSettingsTab();
 			}),
 		);
 	}

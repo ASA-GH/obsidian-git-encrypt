@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab } from "obsidian";
 import type GitEncryptPlugin from "../main";
 import { renderRepositorySection } from "./sections/repository";
 import { renderAuthenticationSection } from "./sections/authentication";
@@ -27,16 +27,30 @@ export class GitEncryptSettingTab extends PluginSettingTab {
 	 * Clears the existing container view and cascades asynchronous injection
 	 * for each logical settings section.
 	 */
-	async display(): Promise<void> {
+	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("Git Encrypt Settings").setHeading();
+		void this.renderSections(containerEl);
+	}
 
-		await renderRepositorySection(containerEl, this.plugin);
-		await renderAuthenticationSection(containerEl, this.plugin);
-		await renderAuthorSection(containerEl, this.plugin);
-		await renderMasterKeySection(containerEl, this.plugin);
-		await renderAdvancedSection(containerEl, this.plugin);
+	/**
+	 * Sequentially executes asynchronous rendering functions for each setting sub-section.
+	 *
+	 * @param containerEl - The parent HTML element where the sections will be rendered.
+	 */
+	private async renderSections(containerEl: HTMLElement): Promise<void> {
+		try {
+			await renderRepositorySection(containerEl, this.plugin);
+			await renderAuthenticationSection(containerEl, this.plugin);
+			await renderAuthorSection(containerEl, this.plugin);
+			await renderMasterKeySection(containerEl, this.plugin, this.app);
+			await renderAdvancedSection(containerEl, this.plugin, this.app);
+		} catch (error) {
+			console.error(
+				"Failed to render Git Encrypt settings sections:",
+				error,
+			);
+		}
 	}
 }

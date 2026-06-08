@@ -27,6 +27,9 @@ export default tseslint.config(
 	},
 	...(obsidianConfigs as unknown as Record<string, unknown>[]),
 	{
+		plugins: {
+			obsidianmd: obsidianmd,
+		},
 		rules: {
 			"obsidianmd/ui/sentence-case": [
 				"warn",

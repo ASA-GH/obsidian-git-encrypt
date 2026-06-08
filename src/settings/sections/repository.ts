@@ -12,10 +12,10 @@ export async function renderRepositorySection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
 ): Promise<void> {
-	containerEl.createEl("h3", { text: "Repository Connection" });
+	containerEl.createEl("h3", { text: "Repository connection" });
 
 	new Setting(containerEl)
-		.setName("Transport Protocol")
+		.setName("Transport protocol")
 		.setDesc("Choose the access method for your remote Git repository.")
 		.addDropdown((dropdown) =>
 			dropdown
@@ -25,7 +25,7 @@ export async function renderRepositorySection(
 				.onChange(async (val: "https" | "ssh") => {
 					plugin.settings.transportType = val;
 					await plugin.saveSettings();
-					plugin.refreshSettingsTab();
+					await plugin.refreshSettingsTab();
 				}),
 		);
 
@@ -55,7 +55,7 @@ export async function renderRepositorySection(
 		.setDesc("Target branch for synchronization.")
 		.addText((text) =>
 			text
-				.setPlaceholder("main")
+				.setPlaceholder("'main'")
 				.setValue(plugin.settings.branch)
 				.onChange(async (val) => {
 					plugin.settings.branch = val.trim();
@@ -64,11 +64,11 @@ export async function renderRepositorySection(
 		);
 
 	new Setting(containerEl)
-		.setName("Remote Name")
+		.setName("Remote name")
 		.setDesc("Name of the remote tracker (usually 'origin').")
 		.addText((text) =>
 			text
-				.setPlaceholder("origin")
+				.setPlaceholder("'origin'")
 				.setValue(plugin.settings.remoteName)
 				.onChange(async (val) => {
 					plugin.settings.remoteName = val.trim();
@@ -77,13 +77,13 @@ export async function renderRepositorySection(
 		);
 
 	new Setting(containerEl)
-		.setName("Local Path")
+		.setName("Local path")
 		.setDesc(
 			"Folder inside the vault where the encrypted Git repository will be located.",
 		)
 		.addText((text) =>
 			text
-				.setPlaceholder(".git-encrypted")
+				.setPlaceholder("Example: .git-encrypted")
 				.setValue(plugin.settings.localPath)
 				.onChange(async (val) => {
 					plugin.settings.localPath = val.trim();

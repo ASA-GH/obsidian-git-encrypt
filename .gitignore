@@ -22,3 +22,5 @@ data.json
 .DS_Store
 
 *.log
+
+!git-remote-crypto-1.0.0.tgz

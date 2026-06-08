@@ -6,6 +6,34 @@ import {
 } from "./settings";
 
 /**
+ * Interface definition describing the NodeJS environment available via Electron on desktop platforms.
+ * Explicitly typed to satisfy strict ESLint and TypeScript compilation rules.
+ */
+interface NodeElectronContext {
+	require: (moduleName: string) => {
+		exec: (cmd: string, cb: (err: unknown, stdout: string) => void) => void;
+		promises: {
+			access: (path: string) => Promise<void>;
+			readFile: (path: string, encoding: string) => Promise<string>;
+			mkdir: (
+				path: string,
+				options: { recursive: boolean },
+			) => Promise<void>;
+			writeFile: (
+				path: string,
+				data: string,
+				options: { mode: number },
+			) => Promise<void>;
+		};
+		resolve: (...paths: string[]) => string;
+		join: (...paths: string[]) => string;
+		dirname: (path: string) => string;
+		homedir: () => string;
+		randomBytes: (size: number) => { toString: (format: string) => string };
+	};
+}
+
+/**
  * Main plugin class for Git Encrypt.
  * Coordinates plugin lifecycle, settings persistence, and desktop-specific native integrations
  * such as Git environment introspection and external cryptographic key file operations.
@@ -25,7 +53,8 @@ export default class GitEncryptPlugin extends Plugin {
 	 * Falls back to default values for missing configuration entries.
 	 */
 	async loadSettings(): Promise<void> {
-		const loadedData = await this.loadData();
+		const loadedData =
+			(await this.loadData()) as Partial<GitEncryptSettings> | null;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
 	}
 
@@ -41,7 +70,30 @@ export default class GitEncryptPlugin extends Plugin {
 	 */
 	async refreshSettingsTab(): Promise<void> {
 		if (this.settingsTab) {
-			await this.settingsTab.display();
+			this.settingsTab.display();
+		}
+	}
+
+	/**
+	 * Executes a shell command on desktop platforms using the dynamic NodeJS context.
+	 * Safely swallows errors and returns stdout, or an empty string on failure.
+	 */
+	private async execDesktopCommand(cmd: string): Promise<string> {
+		if (Platform.isMobile) return "";
+
+		try {
+			const context = window as unknown as NodeElectronContext;
+			if (typeof context.require !== "function") return "";
+
+			const childProcess = context.require("child_process");
+
+			return await new Promise<string>((resolve) => {
+				childProcess.exec(cmd, (_err, stdout) => {
+					resolve(stdout || "");
+				});
+			});
+		} catch {
+			return "";
 		}
 	}
 
@@ -56,20 +108,21 @@ export default class GitEncryptPlugin extends Plugin {
 		if (Platform.isMobile) return null;
 
 		try {
-			const { exec } = require("child_process");
-			const { promisify } = require("util");
-			const path = require("path");
-			const fs = require("fs");
-			const os = require("os");
-			const execPromise = promisify(exec);
+			const context = window as unknown as NodeElectronContext;
+			if (typeof context.require !== "function") return null;
 
-			const { stdout: sshCommand } = await execPromise(
+			const path = context.require("path");
+			const fs = context.require("fs").promises;
+			const os = context.require("os");
+
+			const sshCommand = await this.execDesktopCommand(
 				"git config --global core.sshCommand",
-			).catch(() => ({ stdout: "" }));
+			);
 
 			if (sshCommand) {
-				const match = sshCommand.match(/-i\s+(\S+)/);
-				if (match && match[1]) return path.resolve(match[1].trim());
+				const sshKeyRegex = /-i\s+(\S+)/;
+				const match = sshKeyRegex.exec(sshCommand);
+				if (match?.[1]) return path.resolve(match[1].trim());
 			}
 
 			const homedir = os.homedir();
@@ -80,7 +133,12 @@ export default class GitEncryptPlugin extends Plugin {
 			];
 
 			for (const p of defaultPaths) {
-				if (fs.existsSync(p)) return p;
+				try {
+					await fs.access(p);
+					return p;
+				} catch {
+					/* empty */
+				}
 			}
 			return null;
 		} catch (error) {
@@ -99,17 +157,12 @@ export default class GitEncryptPlugin extends Plugin {
 		if (Platform.isMobile) return { name: "", email: "" };
 
 		try {
-			const { exec } = require("child_process");
-			const { promisify } = require("util");
-			const execPromise = promisify(exec);
-
-			const { stdout: nameOut } = await execPromise(
+			const nameOut = await this.execDesktopCommand(
 				"git config --global user.name",
-			).catch(() => ({ stdout: "" }));
-
-			const { stdout: emailOut } = await execPromise(
+			);
+			const emailOut = await this.execDesktopCommand(
 				"git config --global user.email",
-			).catch(() => ({ stdout: "" }));
+			);
 
 			return {
 				name: nameOut.trim(),
@@ -132,10 +185,19 @@ export default class GitEncryptPlugin extends Plugin {
 		if (Platform.isMobile || !filePath) return false;
 
 		try {
-			const fs = require("fs");
-			if (!fs.existsSync(filePath)) return false;
-			const content = fs.readFileSync(filePath, "utf8").trim();
-			return /^[0-9a-fA-F]{64}$/.test(content);
+			const context = window as unknown as NodeElectronContext;
+			if (typeof context.require !== "function") return false;
+
+			const fs = context.require("fs").promises;
+
+			try {
+				await fs.access(filePath);
+			} catch {
+				return false;
+			}
+
+			const content = await fs.readFile(filePath, "utf8");
+			return /^[0-9a-fA-F]{64}$/.test(content.trim());
 		} catch (error) {
 			console.warn("Failed to check master key file:", error);
 			return false;
@@ -153,22 +215,27 @@ export default class GitEncryptPlugin extends Plugin {
 	async generateAndSaveMasterKeyFile(
 		filePath: string,
 	): Promise<string | null> {
-		if (Platform.isMobile) return null;
+		if (Platform.isMobile || !filePath) return null;
 
 		try {
-			const fs = require("fs");
-			const crypto = require("crypto");
-			const path = require("path");
+			const context = window as unknown as NodeElectronContext;
+			if (typeof context.require !== "function") return null;
+
+			const fs = context.require("fs").promises;
+			const crypto = context.require("crypto");
+			const path = context.require("path");
 
 			const randomBytes = crypto.randomBytes(32);
 			const hex = randomBytes.toString("hex");
 			const dir = path.dirname(filePath);
 
-			if (!fs.existsSync(dir)) {
-				fs.mkdirSync(dir, { recursive: true });
+			try {
+				await fs.access(dir);
+			} catch {
+				await fs.mkdir(dir, { recursive: true });
 			}
 
-			fs.writeFileSync(filePath, hex, { mode: 0o600 });
+			await fs.writeFile(filePath, hex, { mode: 0o600 });
 			return hex;
 		} catch (error) {
 			console.error("Failed to generate or save master key file:", error);

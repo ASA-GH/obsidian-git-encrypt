@@ -1,4 +1,4 @@
-import { Setting, Platform } from "obsidian";
+import { App, Platform, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 
 /**
@@ -8,18 +8,25 @@ import type GitEncryptPlugin from "../../main";
  *
  * @param containerEl - The parent HTML element where the section will be rendered.
  * @param plugin - The main plugin instance containing settings and helper methods.
+ * @param app - The global Obsidian application instance used to access vault configuration.
  */
 export async function renderMasterKeySection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
+	app: App,
 ): Promise<void> {
 	containerEl.createEl("h3", {
-		text: "Encryption Master Key (Zero-Knowledge)",
+		text: "Encryption master key",
 	});
 
-	if (!Platform.isMobile) {
+	if (Platform.isMobile) {
+		if (plugin.settings.masterKeySource !== "manual") {
+			plugin.settings.masterKeySource = "manual";
+			await plugin.saveSettings();
+		}
+	} else {
 		new Setting(containerEl)
-			.setName("Master Key Source")
+			.setName("Master key source")
 			.setDesc(
 				"Choose whether to read the key from an external file or enter it manually.",
 			)
@@ -31,25 +38,20 @@ export async function renderMasterKeySection(
 					.onChange(async (val: "file" | "manual") => {
 						plugin.settings.masterKeySource = val;
 						await plugin.saveSettings();
-						plugin.refreshSettingsTab();
+						await plugin.refreshSettingsTab();
 					}),
 			);
-	} else {
-		if (plugin.settings.masterKeySource !== "manual") {
-			plugin.settings.masterKeySource = "manual";
-			await plugin.saveSettings();
-		}
 	}
 
 	if (!Platform.isMobile && plugin.settings.masterKeySource === "file") {
 		new Setting(containerEl)
-			.setName("Key File Path")
+			.setName("Key file path")
 			.setDesc(
 				"Path to the external file containing a 32-byte hex-encoded key.",
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder(".obsidian/git-encrypt.key")
+					.setPlaceholder(`${app.vault.configDir}/git-encrypt.key`)
 					.setValue(plugin.settings.masterKeyFilePath)
 					.onChange(async (val) => {
 						plugin.settings.masterKeyFilePath = val.trim();
@@ -60,7 +62,7 @@ export async function renderMasterKeySection(
 		const fileCheckSetting = new Setting(containerEl);
 
 		fileCheckSetting.addButton((btn) =>
-			btn.setButtonText("Validate File").onClick(async () => {
+			btn.setButtonText("Validate file").onClick(async () => {
 				const isValid = await plugin.checkMasterKeyFile(
 					plugin.settings.masterKeyFilePath,
 				);
@@ -78,7 +80,7 @@ export async function renderMasterKeySection(
 
 		fileCheckSetting.addButton((btn) =>
 			btn
-				.setButtonText("Generate New Key File")
+				.setButtonText("Generate new key file")
 				.setWarning()
 				.onClick(async () => {
 					const newKeyHex = await plugin.generateAndSaveMasterKeyFile(
@@ -90,7 +92,7 @@ export async function renderMasterKeySection(
 						fileCheckSetting.setDesc(
 							`Key generated and saved to ${plugin.settings.masterKeyFilePath}`,
 						);
-						plugin.refreshSettingsTab();
+						await plugin.refreshSettingsTab();
 					} else {
 						fileCheckSetting.setDesc(
 							"Failed to create file. Please verify write permissions.",
@@ -102,28 +104,28 @@ export async function renderMasterKeySection(
 
 	if (Platform.isMobile || plugin.settings.masterKeySource === "manual") {
 		const keySetting = new Setting(containerEl)
-			.setName("Master Key (Hex)")
+			.setName("Master key (hex)")
 			.setDesc("64 hex characters representing a 32-byte encryption key.")
 			.addText((text) => {
-				text.setPlaceholder("a1b2c3...")
+				text.setPlaceholder("Enter a 64-character hex string...")
 					.setValue(plugin.settings.masterKeyHex)
 					.onChange(async (val) => {
 						plugin.settings.masterKeyHex = val.trim();
 						await plugin.saveSettings();
 					});
-				(text.inputEl as HTMLInputElement).type = "password";
+				text.inputEl.type = "password";
 			});
 
 		keySetting.addButton((btn) =>
-			btn.setButtonText("Generate Key").onClick(async () => {
+			btn.setButtonText("Generate key").onClick(async () => {
 				const randomBytes = new Uint8Array(32);
 				window.crypto.getRandomValues(randomBytes);
-				const hex = Array.from(randomBytes)
+
+				plugin.settings.masterKeyHex = Array.from(randomBytes)
 					.map((b) => b.toString(16).padStart(2, "0"))
 					.join("");
-				plugin.settings.masterKeyHex = hex;
 				await plugin.saveSettings();
-				plugin.refreshSettingsTab();
+				await plugin.refreshSettingsTab();
 			}),
 		);
 	}

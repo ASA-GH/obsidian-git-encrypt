@@ -1,4 +1,4 @@
-import { Setting } from "obsidian";
+import { App, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 
 /**
@@ -8,15 +8,17 @@ import type GitEncryptPlugin from "../../main";
  *
  * @param containerEl - The parent HTML element where the section will be rendered.
  * @param plugin - The main plugin instance containing settings and helper methods.
+ * @param app - The global Obsidian application instance used to access vault configuration.
  */
 export async function renderAdvancedSection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
+	app: App,
 ): Promise<void> {
-	containerEl.createEl("h3", { text: "Advanced Settings" });
+	containerEl.createEl("h3", { text: "Advanced settings" });
 
 	new Setting(containerEl)
-		.setName("Auto Pull on Startup")
+		.setName("Auto pull on startup")
 		.setDesc(
 			"Automatically pull remote repository changes when Obsidian opens.",
 		)
@@ -30,7 +32,7 @@ export async function renderAdvancedSection(
 		);
 
 	new Setting(containerEl)
-		.setName("Auto Push on Exit")
+		.setName("Auto push on exit")
 		.setDesc(
 			"Automatically push local repository changes when Obsidian closes.",
 		)
@@ -44,7 +46,7 @@ export async function renderAdvancedSection(
 		);
 
 	new Setting(containerEl)
-		.setName("Sync Interval (Minutes)")
+		.setName("Sync interval (minutes)")
 		.setDesc(
 			"Set background sync frequency. Enter 0 to disable automatic synchronization.",
 		)
@@ -52,8 +54,8 @@ export async function renderAdvancedSection(
 			text
 				.setValue(String(plugin.settings.syncIntervalMinutes))
 				.onChange(async (val) => {
-					const num = parseInt(val.trim(), 10);
-					if (!isNaN(num)) {
+					const num = Number.parseInt(val.trim(), 10);
+					if (!Number.isNaN(num)) {
 						plugin.settings.syncIntervalMinutes = num;
 						await plugin.saveSettings();
 					}
@@ -61,13 +63,15 @@ export async function renderAdvancedSection(
 		);
 
 	new Setting(containerEl)
-		.setName("Exclude Patterns")
+		.setName("Exclude patterns")
 		.setDesc(
 			"Comma-separated list of files or folders to skip during encryption (supports glob patterns).",
 		)
 		.addTextArea((text) =>
 			text
-				.setPlaceholder(".git, .obsidian, temp.md")
+				.setPlaceholder(
+					`Example: .git, ${app.vault.configDir}, temp.md`,
+				)
 				.setValue(plugin.settings.excludePatterns)
 				.onChange(async (val) => {
 					plugin.settings.excludePatterns = val.trim();
@@ -76,7 +80,7 @@ export async function renderAdvancedSection(
 		);
 
 	new Setting(containerEl)
-		.setName("Merge Conflict Resolution Strategy")
+		.setName("Merge conflict resolution strategy")
 		.setDesc(
 			"Define the default behavior when a merge conflict occurs during synchronization.",
 		)
@@ -86,11 +90,11 @@ export async function renderAdvancedSection(
 				.addOption("abort", "Abort sync operation")
 				.addOption(
 					"theirs",
-					"Overwrite local with remote version (Theirs)",
+					"Overwrite local with remote version (theirs)",
 				)
 				.addOption(
 					"ours",
-					"Keep local version and overwrite remote (Ours)",
+					"Keep local version and overwrite remote (ours)",
 				)
 				.setValue(plugin.settings.conflictAction)
 				.onChange(async (val: "ask" | "abort" | "theirs" | "ours") => {

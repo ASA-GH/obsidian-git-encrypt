@@ -30,7 +30,7 @@ export async function renderAuthenticationSection(
 			);
 
 		new Setting(containerEl)
-			.setName("Personal Access Token (PAT)")
+			.setName("Personal access token")
 			.setDesc(
 				"Token used for authentication (standard passwords are not supported).",
 			)
@@ -41,7 +41,7 @@ export async function renderAuthenticationSection(
 						await plugin.saveSettings();
 					},
 				);
-				(text.inputEl as HTMLInputElement).type = "password";
+				text.inputEl.type = "password";
 			});
 		return;
 	}
@@ -50,7 +50,7 @@ export async function renderAuthenticationSection(
 
 	if (!Platform.isMobile) {
 		new Setting(containerEl)
-			.setName("SSH Key Source")
+			.setName("SSH key source")
 			.setDesc(
 				"Choose whether to automatically discover the key from Git or provide it manually.",
 			)
@@ -62,26 +62,23 @@ export async function renderAuthenticationSection(
 					.onChange(async (val: "git" | "manual") => {
 						plugin.settings.sshKeySource = val;
 						await plugin.saveSettings();
-						plugin.refreshSettingsTab();
+						await plugin.refreshSettingsTab();
 					}),
 			);
-	} else {
-		if (plugin.settings.sshKeySource !== "manual") {
-			plugin.settings.sshKeySource = "manual";
-			await plugin.saveSettings();
-		}
+	} else if (plugin.settings.sshKeySource !== "manual") {
+		plugin.settings.sshKeySource = "manual";
+		await plugin.saveSettings();
 	}
 
 	if (!Platform.isMobile && plugin.settings.sshKeySource === "git") {
 		const gitPathSetting = new Setting(containerEl)
-			.setName("Key Path (from Git)")
+			.setName("Key path (from Git)")
 			.setDesc(
 				"Automatically discovered path from your global Git configuration.",
 			);
 
 		const pathDesc = document.createSpan();
-		pathDesc.style.fontFamily = "monospace";
-		pathDesc.style.fontSize = "0.9em";
+		pathDesc.setAttr("style", "font-family: monospace; font-size: 0.9em;");
 		gitPathSetting.descEl.appendChild(pathDesc);
 
 		const detectedPath = await plugin.getGitSshKeyPath();
@@ -105,13 +102,13 @@ export async function renderAuthenticationSection(
 
 	if (Platform.isMobile || plugin.settings.sshKeySource === "manual") {
 		new Setting(containerEl)
-			.setName("Private Key Content")
+			.setName("Private key content")
 			.setDesc(
 				"Paste the full contents of your private SSH key (including header and footer boundaries).",
 			)
 			.addTextArea((text) =>
 				text
-					.setPlaceholder("-----BEGIN OPENSSH PRIVATE KEY-----\n...")
+					.setPlaceholder("Begin open SSH private key")
 					.setValue(plugin.settings.sshPrivateKeyText)
 					.onChange(async (val) => {
 						plugin.settings.sshPrivateKeyText = val.trim();
@@ -122,7 +119,7 @@ export async function renderAuthenticationSection(
 
 	if (!Platform.isMobile && plugin.settings.sshKeySource === "manual") {
 		new Setting(containerEl)
-			.setName("Private Key File Path (Optional)")
+			.setName("Private key file path (optional)")
 			.setDesc(
 				"Absolute path to load the key directly from a file. Leave empty to use text box above.",
 			)
@@ -149,18 +146,18 @@ export async function renderAuthenticationSection(
 					await plugin.saveSettings();
 				},
 			);
-			(text.inputEl as HTMLInputElement).type = "password";
+			text.inputEl.type = "password";
 		});
 
 	new Setting(containerEl)
-		.setName("SSH Port")
+		.setName("SSH port")
 		.setDesc("Network connection port for SSH. Default is 22.")
 		.addText((text) =>
 			text
 				.setValue(String(plugin.settings.sshPort))
 				.onChange(async (val) => {
-					const port = parseInt(val.trim(), 10);
-					if (!isNaN(port)) {
+					const port = Number.parseInt(val.trim(), 10);
+					if (!Number.isNaN(port)) {
 						plugin.settings.sshPort = port;
 						await plugin.saveSettings();
 					}

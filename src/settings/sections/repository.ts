@@ -1,5 +1,6 @@
 import { Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
+import { createSettingGroup } from "../ui";
 
 /**
  * Renders the repository connection settings section.
@@ -12,9 +13,9 @@ export async function renderRepositorySection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
 ): Promise<void> {
-	containerEl.createEl("h3", { text: "Repository connection" });
+	const itemEl = createSettingGroup(containerEl, "Repository connection");
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Transport protocol")
 		.setDesc("Choose the access method for your remote Git repository.")
 		.addDropdown((dropdown) =>
@@ -29,7 +30,7 @@ export async function renderRepositorySection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Repository URL")
 		.setDesc(
 			plugin.settings.transportType === "ssh"
@@ -50,7 +51,7 @@ export async function renderRepositorySection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Branch")
 		.setDesc("Target branch for synchronization.")
 		.addText((text) =>
@@ -63,7 +64,7 @@ export async function renderRepositorySection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Remote name")
 		.setDesc("Name of the remote tracker (usually 'origin').")
 		.addText((text) =>
@@ -76,7 +77,7 @@ export async function renderRepositorySection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Local path")
 		.setDesc(
 			"Folder inside the vault where the encrypted Git repository will be located.",

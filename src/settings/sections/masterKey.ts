@@ -1,5 +1,6 @@
 import { App, Platform, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
+import { createSettingGroup } from "../ui";
 
 /**
  * Renders the master encryption key configuration section (Zero-Knowledge).
@@ -15,9 +16,7 @@ export async function renderMasterKeySection(
 	plugin: GitEncryptPlugin,
 	app: App,
 ): Promise<void> {
-	containerEl.createEl("h3", {
-		text: "Encryption master key",
-	});
+	const itemEl = createSettingGroup(containerEl, "Encryption master key");
 
 	if (Platform.isMobile) {
 		if (plugin.settings.masterKeySource !== "manual") {
@@ -25,7 +24,7 @@ export async function renderMasterKeySection(
 			await plugin.saveSettings();
 		}
 	} else {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Master key source")
 			.setDesc(
 				"Choose whether to read the key from an external file or enter it manually.",
@@ -44,7 +43,7 @@ export async function renderMasterKeySection(
 	}
 
 	if (!Platform.isMobile && plugin.settings.masterKeySource === "file") {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Key file path")
 			.setDesc(
 				"Path to the external file containing a 32-byte hex-encoded key.",
@@ -59,22 +58,18 @@ export async function renderMasterKeySection(
 					}),
 			);
 
-		const fileCheckSetting = new Setting(containerEl);
+		const fileCheckSetting = new Setting(itemEl);
 
 		fileCheckSetting.addButton((btn) =>
 			btn.setButtonText("Validate file").onClick(async () => {
 				const isValid = await plugin.checkMasterKeyFile(
 					plugin.settings.masterKeyFilePath,
 				);
-				if (isValid) {
-					fileCheckSetting.setDesc(
-						"File exists and contains a valid 32-byte key.",
-					);
-				} else {
-					fileCheckSetting.setDesc(
-						"File not found or key format is invalid.",
-					);
-				}
+				fileCheckSetting.setDesc(
+					isValid
+						? "File exists and contains a valid 32-byte key."
+						: "File not found or key format is invalid.",
+				);
 			}),
 		);
 
@@ -103,7 +98,7 @@ export async function renderMasterKeySection(
 	}
 
 	if (Platform.isMobile || plugin.settings.masterKeySource === "manual") {
-		const keySetting = new Setting(containerEl)
+		const keySetting = new Setting(itemEl)
 			.setName("Master key (hex)")
 			.setDesc("64 hex characters representing a 32-byte encryption key.")
 			.addText((text) => {

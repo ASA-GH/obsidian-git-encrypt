@@ -1,5 +1,6 @@
 import { Setting, Platform } from "obsidian";
 import type GitEncryptPlugin from "../../main";
+import { createSettingGroup } from "../ui";
 
 /**
  * Renders the commit author configuration section.
@@ -13,7 +14,7 @@ export async function renderAuthorSection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
 ): Promise<void> {
-	containerEl.createEl("h3", { text: "Commit author" });
+	const itemEl = createSettingGroup(containerEl, "Commit author");
 
 	if (Platform.isMobile) {
 		if (plugin.settings.authorSource !== "manual") {
@@ -21,7 +22,7 @@ export async function renderAuthorSection(
 			await plugin.saveSettings();
 		}
 	} else {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Author data source")
 			.setDesc(
 				"Load identity details from the global Git config or enter them manually.",
@@ -46,7 +47,7 @@ export async function renderAuthorSection(
 	}
 
 	if (Platform.isMobile || plugin.settings.authorSource === "manual") {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Author name")
 			.setDesc("The name associated with each generated Git commit.")
 			.addText((text) =>
@@ -58,7 +59,7 @@ export async function renderAuthorSection(
 					}),
 			);
 
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Author email")
 			.setDesc(
 				"The email address associated with each generated Git commit.",
@@ -72,7 +73,7 @@ export async function renderAuthorSection(
 					}),
 			);
 	} else if (!Platform.isMobile && plugin.settings.authorSource === "git") {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Author name (from Git)")
 			.setDesc(
 				"Read-only identity name pulled from the global Git configuration.",
@@ -81,7 +82,7 @@ export async function renderAuthorSection(
 				text.setValue(plugin.settings.authorName).setDisabled(true);
 			});
 
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Author email (from Git)")
 			.setDesc(
 				"Read-only identity email pulled from the global Git configuration.",
@@ -90,7 +91,7 @@ export async function renderAuthorSection(
 				text.setValue(plugin.settings.authorEmail).setDisabled(true);
 			});
 
-		new Setting(containerEl).addButton((btn) =>
+		new Setting(itemEl).addButton((btn) =>
 			btn.setButtonText("Refresh from Git").onClick(async () => {
 				const { name, email } = await plugin.getGitGlobalUser();
 				if (name) plugin.settings.authorName = name;

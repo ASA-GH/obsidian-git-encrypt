@@ -1,5 +1,6 @@
 import { App, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
+import { createSettingGroup } from "../ui";
 
 /**
  * Renders advanced automation and synchronization settings.
@@ -15,9 +16,9 @@ export async function renderAdvancedSection(
 	plugin: GitEncryptPlugin,
 	app: App,
 ): Promise<void> {
-	containerEl.createEl("h3", { text: "Advanced settings" });
+	const itemEl = createSettingGroup(containerEl, "Advanced settings");
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Auto pull on startup")
 		.setDesc(
 			"Automatically pull remote repository changes when Obsidian opens.",
@@ -31,7 +32,7 @@ export async function renderAdvancedSection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Auto push on exit")
 		.setDesc(
 			"Automatically push local repository changes when Obsidian closes.",
@@ -45,7 +46,7 @@ export async function renderAdvancedSection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Sync interval (minutes)")
 		.setDesc(
 			"Set background sync frequency. Enter 0 to disable automatic synchronization.",
@@ -62,7 +63,7 @@ export async function renderAdvancedSection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Exclude patterns")
 		.setDesc(
 			"Comma-separated list of files or folders to skip during encryption (supports glob patterns).",
@@ -79,7 +80,7 @@ export async function renderAdvancedSection(
 				}),
 		);
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Merge conflict resolution strategy")
 		.setDesc(
 			"Define the default behavior when a merge conflict occurs during synchronization.",

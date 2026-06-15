@@ -1,5 +1,6 @@
 import { Setting, Platform } from "obsidian";
 import type GitEncryptPlugin from "../../main";
+import { createSettingGroup } from "../ui";
 
 /**
  * Renders the authentication settings section.
@@ -14,10 +15,13 @@ export async function renderAuthenticationSection(
 	containerEl: HTMLElement,
 	plugin: GitEncryptPlugin,
 ): Promise<void> {
-	if (plugin.settings.transportType === "https") {
-		containerEl.createEl("h3", { text: "Authentication (HTTPS)" });
+	const itemEl = createSettingGroup(
+		containerEl,
+		`Authentication (${plugin.settings.transportType === "https" ? "HTTPS" : "SSH"})`,
+	);
 
-		new Setting(containerEl)
+	if (plugin.settings.transportType === "https") {
+		new Setting(itemEl)
 			.setName("Username")
 			.setDesc("Your Git hosting provider username.")
 			.addText((text) =>
@@ -29,7 +33,7 @@ export async function renderAuthenticationSection(
 					}),
 			);
 
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Personal access token")
 			.setDesc(
 				"Token used for authentication (standard passwords are not supported).",
@@ -46,10 +50,8 @@ export async function renderAuthenticationSection(
 		return;
 	}
 
-	containerEl.createEl("h3", { text: "Authentication (SSH)" });
-
 	if (!Platform.isMobile) {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("SSH key source")
 			.setDesc(
 				"Choose whether to automatically discover the key from Git or provide it manually.",
@@ -71,7 +73,7 @@ export async function renderAuthenticationSection(
 	}
 
 	if (!Platform.isMobile && plugin.settings.sshKeySource === "git") {
-		const gitPathSetting = new Setting(containerEl)
+		const gitPathSetting = new Setting(itemEl)
 			.setName("Key path (from Git)")
 			.setDesc(
 				"Automatically discovered path from your global Git configuration.",
@@ -101,7 +103,7 @@ export async function renderAuthenticationSection(
 	}
 
 	if (Platform.isMobile || plugin.settings.sshKeySource === "manual") {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Private key content")
 			.setDesc(
 				"Paste the full contents of your private SSH key (including header and footer boundaries).",
@@ -118,7 +120,7 @@ export async function renderAuthenticationSection(
 	}
 
 	if (!Platform.isMobile && plugin.settings.sshKeySource === "manual") {
-		new Setting(containerEl)
+		new Setting(itemEl)
 			.setName("Private key file path (optional)")
 			.setDesc(
 				"Absolute path to load the key directly from a file. Leave empty to use text box above.",
@@ -134,7 +136,7 @@ export async function renderAuthenticationSection(
 			);
 	}
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("Passphrase")
 		.setDesc(
 			"Leave empty if your private SSH key does not require a passphrase.",
@@ -149,7 +151,7 @@ export async function renderAuthenticationSection(
 			text.inputEl.type = "password";
 		});
 
-	new Setting(containerEl)
+	new Setting(itemEl)
 		.setName("SSH port")
 		.setDesc("Network connection port for SSH. Default is 22.")
 		.addText((text) =>

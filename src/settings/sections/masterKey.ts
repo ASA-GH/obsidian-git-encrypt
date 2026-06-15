@@ -1,10 +1,11 @@
-import { App, Platform, Setting } from "obsidian";
+import { App, Notice, Platform, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 import { createSettingGroup } from "../ui";
 
 /**
  * Renders the master encryption key configuration section (Zero-Knowledge).
- * On desktop, it facilitates reading, validating, or generating keys stored inside external files.
+ * On desktop, it facilitates reading/validating keys from external files, entering them manually,
+ * or securely offloading them to the operating system's native secure credential storage (Keychain).
  * On mobile, it locks operation to manual hex configuration with secure web-crypto generation.
  *
  * @param containerEl - The parent HTML element where the section will be rendered.
@@ -27,19 +28,53 @@ export async function renderMasterKeySection(
 		new Setting(itemEl)
 			.setName("Master key source")
 			.setDesc(
-				"Choose whether to read the key from an external file or enter it manually.",
+				"Choose whether to store the key securely in system keychain, read from a file, or enter it manually.",
 			)
 			.addDropdown((dropdown) =>
 				dropdown
+					.addOption("keychain", "System keychain (recommended)")
 					.addOption("file", "Read from file")
 					.addOption("manual", "Enter manually")
 					.setValue(plugin.settings.masterKeySource)
-					.onChange(async (val: "file" | "manual") => {
+					.onChange(async (val: "keychain" | "file" | "manual") => {
 						plugin.settings.masterKeySource = val;
 						await plugin.saveSettings();
 						await plugin.refreshSettingsTab();
 					}),
 			);
+	}
+
+	if (!Platform.isMobile && plugin.settings.masterKeySource === "keychain") {
+		const keychainSetting = new Setting(itemEl)
+			.setName("System credential storage")
+			.setDesc(
+				"The key will be encrypted via os native security APIs and stored in your vault config.",
+			);
+
+		keychainSetting.addButton((btn) =>
+			btn
+				.setButtonText("Generate & save to keychain")
+				.setCta()
+				.onClick(async () => {
+					const randomBytes = new Uint8Array(32);
+					window.crypto.getRandomValues(randomBytes);
+					const generatedHex = Array.from(randomBytes)
+						.map((b) => b.toString(16).padStart(2, "0"))
+						.join("");
+
+					const success =
+						await plugin.sys.saveKeyToKeychain(generatedHex);
+					if (success) {
+						keychainSetting.setDesc(
+							"Key successfully generated and encrypted inside system keychain.",
+						);
+					} else {
+						keychainSetting.setDesc(
+							"Failed to access system secure storage. Check os permissions.",
+						);
+					}
+				}),
+		);
 	}
 
 	if (!Platform.isMobile && plugin.settings.masterKeySource === "file") {
@@ -62,7 +97,7 @@ export async function renderMasterKeySection(
 
 		fileCheckSetting.addButton((btn) =>
 			btn.setButtonText("Validate file").onClick(async () => {
-				const isValid = await plugin.checkMasterKeyFile(
+				const isValid = await plugin.sys.checkMasterKeyFile(
 					plugin.settings.masterKeyFilePath,
 				);
 				fileCheckSetting.setDesc(
@@ -78,9 +113,10 @@ export async function renderMasterKeySection(
 				.setButtonText("Generate new key file")
 				.setWarning()
 				.onClick(async () => {
-					const newKeyHex = await plugin.generateAndSaveMasterKeyFile(
-						plugin.settings.masterKeyFilePath,
-					);
+					const newKeyHex =
+						await plugin.sys.generateAndSaveMasterKeyFile(
+							plugin.settings.masterKeyFilePath,
+						);
 					if (newKeyHex) {
 						plugin.settings.masterKeyHex = newKeyHex;
 						await plugin.saveSettings();
@@ -123,5 +159,34 @@ export async function renderMasterKeySection(
 				await plugin.refreshSettingsTab();
 			}),
 		);
+
+		if (!Platform.isMobile) {
+			keySetting.addButton((btn) =>
+				btn
+					.setButtonText("Move to keychain")
+					.setWarning()
+					.onClick(async () => {
+						if (plugin.settings.masterKeyHex.length !== 64) {
+							new Notice(
+								"Please enter a valid 64-character hex key first.",
+							);
+							return;
+						}
+						const success = await plugin.sys.saveKeyToKeychain(
+							plugin.settings.masterKeyHex,
+						);
+						if (success) {
+							new Notice(
+								"Key successfully moved to system keychain.",
+							);
+							await plugin.refreshSettingsTab();
+						} else {
+							new Notice(
+								"Failed to save key to keychain. Check console for details.",
+							);
+						}
+					}),
+			);
+		}
 	}
 }

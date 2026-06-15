@@ -43,7 +43,19 @@ export default class GitEncryptPlugin extends Plugin {
 	async loadSettings(): Promise<void> {
 		const loadedData =
 			(await this.loadData()) as Partial<GitEncryptSettings> | null;
+
 		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
+
+		if (this.settings.masterKeySource === "keychain") {
+			const decryptedKey = await this.sys.loadKeyFromKeychain();
+			if (decryptedKey) {
+				this.settings.masterKeyHex = decryptedKey;
+			} else {
+				console.error(
+					"GitEncrypt: Secure storage unlock aborted. Master key is unresolvable.",
+				);
+			}
+		}
 	}
 
 	/**

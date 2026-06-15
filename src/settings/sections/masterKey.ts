@@ -164,7 +164,7 @@ export async function renderMasterKeySection(
 			keySetting.addButton((btn) =>
 				btn
 					.setButtonText("Move to keychain")
-					.setWarning()
+					.setCta()
 					.onClick(async () => {
 						if (plugin.settings.masterKeyHex.length !== 64) {
 							new Notice(

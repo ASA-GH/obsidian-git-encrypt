@@ -83,14 +83,14 @@ export async function renderAuthenticationSection(
 		pathDesc.setAttr("style", "font-family: monospace; font-size: 0.9em;");
 		gitPathSetting.descEl.appendChild(pathDesc);
 
-		const detectedPath = await plugin.getGitSshKeyPath();
+		const detectedPath = await plugin.sys.getGitSshKeyPath();
 		pathDesc.innerText =
 			detectedPath ||
 			"Failed to detect key path. Please select manual input or verify Git configuration.";
 
 		gitPathSetting.addButton((btn) =>
 			btn.setButtonText("Check").onClick(async () => {
-				const newPath = await plugin.getGitSshKeyPath();
+				const newPath = await plugin.sys.getGitSshKeyPath();
 				pathDesc.innerText =
 					newPath ||
 					"Key not found. Check core.sshCommand or ~/.ssh/config.";

@@ -36,7 +36,7 @@ export async function renderAuthorSection(
 						plugin.settings.authorSource = val;
 						if (val === "git") {
 							const { name, email } =
-								await plugin.getGitGlobalUser();
+								await plugin.sys.getGitGlobalUser();
 							if (name) plugin.settings.authorName = name;
 							if (email) plugin.settings.authorEmail = email;
 							await plugin.saveSettings();
@@ -93,7 +93,7 @@ export async function renderAuthorSection(
 
 		new Setting(itemEl).addButton((btn) =>
 			btn.setButtonText("Refresh from Git").onClick(async () => {
-				const { name, email } = await plugin.getGitGlobalUser();
+				const { name, email } = await plugin.sys.getGitGlobalUser();
 				if (name) plugin.settings.authorName = name;
 				if (email) plugin.settings.authorEmail = email;
 				await plugin.saveSettings();

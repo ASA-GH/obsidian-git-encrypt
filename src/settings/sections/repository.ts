@@ -1,34 +1,39 @@
-import { Notice, Platform, Setting } from "obsidian";
+import { Notice, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 import { createSettingGroup } from "../ui";
+import { isMobilePlatform } from "../platform";
+
+/**
+ * Result of validating a repository URL against the selected transport protocol.
+ */
+type ValidationResult =
+	| { valid: true }
+	| { valid: false; message: string };
+
+const EXPECTED_PREFIXES: Record<"https" | "ssh", string> = {
+	https: "https://",
+	ssh: "git@",
+};
 
 /**
  * Validates a repository URL against the selected transport protocol.
- * @returns true if valid, false if invalid.
+ * Pure function — no side effects. Callers decide how to surface errors.
  */
 function validateRepositoryUrl(
 	repositoryUrl: string,
 	transportType: "https" | "ssh",
-): boolean {
+): ValidationResult {
 	const trimmed = repositoryUrl.trim();
-	if (!trimmed) {
-		return true; // empty is allowed — user hasn't filled it in yet
+	if (!trimmed) return { valid: true };
+
+	const expectedPrefix = EXPECTED_PREFIXES[transportType];
+	if (!trimmed.startsWith(expectedPrefix)) {
+		return {
+			valid: false,
+			message: `Invalid ${transportType} url: must start with ${expectedPrefix}`,
+		};
 	}
-	if (transportType === "https") {
-		if (!trimmed.startsWith("https://")) {
-			new Notice("Invalid https url: must start with https://", 6000);
-			return false;
-		}
-	} else {
-		if (!trimmed.startsWith("git@")) {
-			new Notice(
-				"Invalid SSH url: must start with git@",
-				6000,
-			);
-			return false;
-		}
-	}
-	return true;
+	return { valid: true };
 }
 
 /**
@@ -111,9 +116,12 @@ export async function renderRepositorySection(
 				)
 				.setValue(plugin.settings.repositoryUrl)
 				.onChange(async (val) => {
-					plugin.settings.repositoryUrl = val.trim();
-					if (validateRepositoryUrl(val.trim(), plugin.settings.transportType)) {
+					const result = validateRepositoryUrl(val.trim(), plugin.settings.transportType);
+					if (result.valid) {
+						plugin.settings.repositoryUrl = val.trim();
 						await plugin.saveSettings();
+					} else {
+						new Notice(result.message, 6000);
 					}
 				}),
 		);
@@ -144,7 +152,7 @@ export async function renderRepositorySection(
 				}),
 		);
 
-	if (!Platform.isMobile) {
+	if (!isMobilePlatform) {
 		new Setting(itemEl)
 			.setName("Local path")
 			.setDesc(

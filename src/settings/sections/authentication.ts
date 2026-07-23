@@ -47,8 +47,7 @@ export async function renderAuthenticationSection(
 				);
 				text.inputEl.type = "password";
 			});
-		return;
-	}
+		} else {
 
 	if (!Platform.isMobile) {
 		new Setting(itemEl)
@@ -165,4 +164,5 @@ export async function renderAuthenticationSection(
 					}
 				}),
 		);
+	}
 }

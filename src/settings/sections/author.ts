@@ -1,6 +1,8 @@
-import { Setting, Platform, Notice } from "obsidian";
+import { Setting, Notice } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 import { createSettingGroup } from "../ui";
+import { isValidEmail } from "../validators";
+import { isMobilePlatform } from "../platform";
 
 /**
  * Renders the commit author configuration section.
@@ -16,7 +18,7 @@ export async function renderAuthorSection(
 ): Promise<void> {
 	const itemEl = createSettingGroup(containerEl, "Commit author");
 
-	if (Platform.isMobile) {
+	if (isMobilePlatform) {
 		if (plugin.settings.authorSource !== "manual") {
 			plugin.settings.authorSource = "manual";
 			await plugin.saveSettings();
@@ -46,7 +48,7 @@ export async function renderAuthorSection(
 			);
 	}
 
-	if (Platform.isMobile || plugin.settings.authorSource === "manual") {
+	if (isMobilePlatform || plugin.settings.authorSource === "manual") {
 		new Setting(itemEl)
 			.setName("Author name")
 			.setDesc("The name associated with each generated Git commit.")
@@ -69,7 +71,7 @@ export async function renderAuthorSection(
 					.setValue(plugin.settings.authorEmail)
 					.onChange(async (val) => {
 						const trimmed = val.trim();
-						if (trimmed.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+						if (trimmed.length > 0 && !isValidEmail(trimmed)) {
 							new Notice("Author email must contain '@' and a domain part.");
 							return;
 						}
@@ -77,7 +79,7 @@ export async function renderAuthorSection(
 						await plugin.saveSettings();
 					}),
 			);
-	} else if (!Platform.isMobile && plugin.settings.authorSource === "git") {
+	} else if (!isMobilePlatform && plugin.settings.authorSource === "git") {
 		new Setting(itemEl)
 			.setName("Author name (from Git)")
 			.setDesc(

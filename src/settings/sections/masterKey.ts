@@ -1,6 +1,8 @@
-import { App, Notice, Platform, Setting } from "obsidian";
+import { App, Notice, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
-import { createSettingGroup } from "../ui";
+import { createSettingGroup, renderCallout } from "../ui";
+import { isValidHexKey } from "../validators";
+import { isMobilePlatform } from "../platform";
 
 /**
  * Renders the master encryption key configuration section (Zero-Knowledge).
@@ -20,56 +22,63 @@ export async function renderMasterKeySection(
 	const itemEl = createSettingGroup(containerEl, "Encryption master key");
 
 	// How-it-works callout — explains zero-knowledge model before storage options.
-	const calloutEl = itemEl.createDiv({
-		cls: "callout callout-info",
-		attr: { role: "note" },
-	});
-	calloutEl.createDiv({ cls: "callout-icon" }).innerHTML =
-		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>';
-	calloutEl.createDiv({
-		cls: "callout-title",
-		text: "How encryption works",
-	});
-	calloutEl.createDiv({
-		cls: "callout-content",
-		text: "Your master key encrypts every note before it leaves your device. Neither the Git remote nor the plugin authors can read your data. Choose how you want to store the key below.",
-	});
+	renderCallout(
+		itemEl,
+		"How encryption works",
+		"Your master key encrypts every note before it leaves your device. Neither the Git remote nor the plugin authors can read your data. Choose how you want to store the key below.",
+	);
 
-	if (Platform.isMobile) {
+	if (isMobilePlatform) {
 		if (plugin.settings.masterKeySource !== "manual") {
 			plugin.settings.masterKeySource = "manual";
 			await plugin.saveSettings();
 		}
+		renderManualKeyEntry(itemEl, plugin);
 	} else {
-		new Setting(itemEl)
-			.setName("Master key source")
-			.setDesc(
-				"Choose whether to store the key securely in system keychain, read from a file, or enter it manually.",
-			)
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption(
-						"keychain",
-						"System Keychain — stored in your OS's encrypted credential vault (macOS Keychain / Windows Credential Manager / Linux Secret Service)",
-					)
-					.addOption(
-						"file",
-						"Key File — read from an external file on your computer",
-					)
-					.addOption(
-						"manual",
-						"Enter Manually — type or paste the hex key directly",
-					)
-					.setValue(plugin.settings.masterKeySource)
-					.onChange(async (val: "keychain" | "file" | "manual") => {
-						plugin.settings.masterKeySource = val;
-						await plugin.saveSettings();
-						await plugin.refreshSettingsTab();
-					}),
-			);
+		renderDesktopKeyOptions(itemEl, plugin);
+		renderManualKeyEntry(itemEl, plugin, app);
 	}
+}
 
-	if (!Platform.isMobile && plugin.settings.masterKeySource === "keychain") {
+/**
+ * Renders desktop-only key source options: master key source dropdown,
+ * keychain generation, and file-based key management.
+ *
+ * @param itemEl - The parent HTML element for this section.
+ * @param plugin - The main plugin instance containing settings and helper methods.
+ */
+function renderDesktopKeyOptions(
+	itemEl: HTMLElement,
+	plugin: GitEncryptPlugin,
+): void {
+	new Setting(itemEl)
+		.setName("Master key source")
+		.setDesc(
+			"Choose whether to store the key securely in system keychain, read from a file, or enter it manually.",
+		)
+		.addDropdown((dropdown) =>
+			dropdown
+				.addOption(
+					"keychain",
+					"System Keychain — stored in your OS's encrypted credential vault (macOS Keychain / Windows Credential Manager / Linux Secret Service)",
+				)
+				.addOption(
+					"file",
+					"Key File — read from an external file on your computer",
+				)
+				.addOption(
+					"manual",
+					"Enter Manually — type or paste the hex key directly",
+				)
+				.setValue(plugin.settings.masterKeySource)
+				.onChange(async (val: "keychain" | "file" | "manual") => {
+					plugin.settings.masterKeySource = val;
+					await plugin.saveSettings();
+					await plugin.refreshSettingsTab();
+				}),
+		);
+
+	if (plugin.settings.masterKeySource === "keychain") {
 		const keychainSetting = new Setting(itemEl)
 			.setName("System credential storage")
 			.setDesc(
@@ -87,22 +96,26 @@ export async function renderMasterKeySection(
 						.map((b) => b.toString(16).padStart(2, "0"))
 						.join("");
 
-					const success =
+					const result =
 						await plugin.sys.saveKeyToKeychain(generatedHex);
-					if (success) {
+					if (result.success) {
+						plugin.settings.encryptedMasterKey = result.encryptedKey;
+						plugin.settings.masterKeySource = "keychain";
+						plugin.settings.masterKeyHex = "";
+						await plugin.saveSettings();
 						keychainSetting.setDesc(
 							"Key successfully generated and encrypted inside system keychain.",
 						);
 					} else {
 						keychainSetting.setDesc(
-							"Failed to access system secure storage. Check os permissions.",
+							`Failed to access system secure storage: ${result.error}`,
 						);
 					}
 				}),
 		);
 	}
 
-	if (!Platform.isMobile && plugin.settings.masterKeySource === "file") {
+	if (plugin.settings.masterKeySource === "file") {
 		new Setting(itemEl)
 			.setName("Key file path")
 			.setDesc(
@@ -110,7 +123,7 @@ export async function renderMasterKeySection(
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder(`${app.vault.configDir}/git-encrypt.key`)
+					.setPlaceholder("git-encrypt.key")
 					.setValue(plugin.settings.masterKeyFilePath)
 					.onChange(async (val) => {
 						plugin.settings.masterKeyFilePath = val.trim();
@@ -157,91 +170,103 @@ export async function renderMasterKeySection(
 				}),
 		);
 	}
+}
 
-	if (Platform.isMobile || plugin.settings.masterKeySource === "manual") {
-		const keySetting = new Setting(itemEl)
-			.setName("Master key (hex)")
-			.setDesc("64 hex characters representing a 32-byte encryption key.")
-			.addText((text) => {
-				text.setPlaceholder("Enter a 64-character hex string...")
-					.setValue(plugin.settings.masterKeyHex)
-					.onChange(async (val) => {
-						const trimmed = val.trim();
-						if (trimmed.length > 0 && !/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-							new Notice("Master key must be exactly 64 hexadecimal characters.");
-							return;
-						}
-						plugin.settings.masterKeyHex = trimmed;
+/**
+ * Renders the manual master key entry UI with generate, copy, and load-from-clipboard actions.
+ * On desktop, also includes the "Move to keychain" migration button.
+ *
+ * @param itemEl - The parent HTML element for this section.
+ * @param plugin - The main plugin instance containing settings and helper methods.
+ * @param app - The Obsidian application instance (desktop-only for placeholder text and keychain migration).
+ */
+function renderManualKeyEntry(
+	itemEl: HTMLElement,
+	plugin: GitEncryptPlugin,
+	app?: App,
+): void {
+	const keySetting = new Setting(itemEl)
+		.setName("Master key (hex)")
+		.setDesc("64 hex characters representing a 32-byte encryption key.")
+		.addText((text) => {
+			text.setPlaceholder(
+				app ? "Enter a 64-character hex string..." : "Paste your 64-char hex key here",
+			)
+				.setValue(plugin.settings.masterKeyHex)
+				.onChange(async (val) => {
+					const trimmed = val.trim();
+					if (trimmed.length > 0 && !isValidHexKey(trimmed)) {
+						new Notice("Master key must be exactly 64 hexadecimal characters.");
+						return;
+					}
+					plugin.settings.masterKeyHex = trimmed;
+					await plugin.saveSettings();
+				});
+			text.inputEl.type = "password";
+		});
+
+	keySetting.addButton((btn) =>
+		btn.setButtonText("Load key").onClick(async () => {
+			const text = await navigator.clipboard.readText();
+			const trimmed = text.trim();
+			if (!isValidHexKey(trimmed)) {
+				new Notice("Clipboard does not contain a valid 64-character hex key.");
+				return;
+			}
+			plugin.settings.masterKeyHex = trimmed;
+			await plugin.saveSettings();
+			await plugin.refreshSettingsTab();
+		}),
+	);
+
+	keySetting.addButton((btn) =>
+		btn.setButtonText("Copy").onClick(async () => {
+			if (plugin.settings.masterKeyHex.length !== 64) {
+				new Notice("No key to copy — enter or generate one first.");
+				return;
+			}
+			await navigator.clipboard.writeText(plugin.settings.masterKeyHex);
+			new Notice("Key copied to clipboard.");
+		}),
+	);
+
+	keySetting.addButton((btn) =>
+		btn.setButtonText("Generate key").onClick(async () => {
+			const randomBytes = new Uint8Array(32);
+			window.crypto.getRandomValues(randomBytes);
+
+			plugin.settings.masterKeyHex = Array.from(randomBytes)
+				.map((b) => b.toString(16).padStart(2, "0"))
+				.join("");
+			await plugin.saveSettings();
+			await plugin.refreshSettingsTab();
+		}),
+	);
+
+	if (app) {
+		keySetting.addButton((btn) =>
+			btn
+				.setButtonText("Move to keychain")
+				.setCta()
+				.onClick(async () => {
+					if (plugin.settings.masterKeyHex.length !== 64) {
+						new Notice("Please enter a valid 64-character hex key first.");
+						return;
+					}
+					const result = await plugin.sys.saveKeyToKeychain(
+						plugin.settings.masterKeyHex,
+					);
+					if (result.success) {
+						plugin.settings.encryptedMasterKey = result.encryptedKey;
+						plugin.settings.masterKeySource = "keychain";
+						plugin.settings.masterKeyHex = "";
 						await plugin.saveSettings();
-					});
-				text.inputEl.type = "password";
-			});
-
-		keySetting.addButton((btn) =>
-			btn.setButtonText("Load key").onClick(async () => {
-				const text = await navigator.clipboard.readText();
-				const trimmed = text.trim();
-				if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-					new Notice("Clipboard does not contain a valid 64-character hex key.");
-					return;
-				}
-				plugin.settings.masterKeyHex = trimmed;
-				await plugin.saveSettings();
-				await plugin.refreshSettingsTab();
-			}),
+						new Notice("Key successfully moved to system keychain.");
+						await plugin.refreshSettingsTab();
+					} else {
+						new Notice("Failed to save key to keychain: " + result.error);
+					}
+				}),
 		);
-
-		keySetting.addButton((btn) =>
-			btn.setButtonText("Copy").onClick(async () => {
-				if (plugin.settings.masterKeyHex.length !== 64) {
-					new Notice("No key to copy — enter or generate one first.");
-					return;
-				}
-				await navigator.clipboard.writeText(plugin.settings.masterKeyHex);
-				new Notice("Key copied to clipboard.");
-			}),
-		);
-
-		keySetting.addButton((btn) =>
-			btn.setButtonText("Generate key").onClick(async () => {
-				const randomBytes = new Uint8Array(32);
-				window.crypto.getRandomValues(randomBytes);
-
-				plugin.settings.masterKeyHex = Array.from(randomBytes)
-					.map((b) => b.toString(16).padStart(2, "0"))
-					.join("");
-				await plugin.saveSettings();
-				await plugin.refreshSettingsTab();
-			}),
-		);
-
-		if (!Platform.isMobile) {
-			keySetting.addButton((btn) =>
-				btn
-					.setButtonText("Move to keychain")
-					.setCta()
-					.onClick(async () => {
-						if (plugin.settings.masterKeyHex.length !== 64) {
-							new Notice(
-								"Please enter a valid 64-character hex key first.",
-							);
-							return;
-						}
-						const success = await plugin.sys.saveKeyToKeychain(
-							plugin.settings.masterKeyHex,
-						);
-						if (success) {
-							new Notice(
-								"Key successfully moved to system keychain.",
-							);
-							await plugin.refreshSettingsTab();
-						} else {
-							new Notice(
-								"Failed to save key to keychain. Check console for details.",
-							);
-						}
-					}),
-			);
-		}
 	}
 }

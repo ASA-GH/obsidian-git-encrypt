@@ -1,6 +1,6 @@
 import { App, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
-import { createSettingGroup } from "../ui";
+import { createSettingGroup, renderCallout } from "../ui";
 
 /**
  * Renders advanced automation and synchronization settings.
@@ -19,20 +19,11 @@ export async function renderAdvancedSection(
 	const itemEl = createSettingGroup(containerEl, "Advanced settings");
 
 	// Sync explanation — clarifies what git-remote-crypto does on push/pull.
-	const syncCalloutEl = itemEl.createDiv({
-		cls: "callout callout-info",
-		attr: { role: "note" },
-	});
-	syncCalloutEl.createDiv({ cls: "callout-icon" }).innerHTML =
-		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>';
-	syncCalloutEl.createDiv({
-		cls: "callout-title",
-		text: "How sync works",
-	});
-	syncCalloutEl.createDiv({
-		cls: "callout-content",
-		text: "On push, git-remote-crypto encrypts every note before sending it to the remote. On pull, it decrypts encrypted blobs back into readable notes. On the first push, all notes are encrypted and uploaded — the remote will contain only ciphertext. Make sure to back up your vault before the first sync.",
-	});
+	renderCallout(
+		itemEl,
+		"How sync works",
+		"On push, git-remote-crypto encrypts every note before sending it to the remote. On pull, it decrypts encrypted blobs back into readable notes. On the first push, all notes are encrypted and uploaded — the remote will contain only ciphertext. Make sure to back up your vault before the first sync.",
+	);
 
 	new Setting(itemEl)
 		.setName("Auto pull on startup")

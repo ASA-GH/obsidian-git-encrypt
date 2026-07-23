@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: GitEncryptSettings = {
 	branch: "main",
 	conflictAction: "ask",
 	encryptedMasterKey: "",
-	excludePatterns: ".obsidian\\n.trash\\ntemp.*",
+	excludePatterns: ".obsidian\n.trash\ntemp.*",
 	httpToken: "",
 	httpUsername: "",
 	localPath: ".git-encrypted",

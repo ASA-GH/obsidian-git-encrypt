@@ -96,7 +96,7 @@ export async function renderRepositorySection(
 	if (!plugin.settings.repositoryUrl.trim()) {
 		frag.append(document.createTextNode("\n"));
 		const steps = frag.appendChild(document.createElement("div"));
-		steps.style.cssText = "margin-top:4px;font-size:0.9em;";
+		steps.addClass("list list-numbers");
 		steps.appendChild(document.createTextNode("1. "));
 		steps.appendChild(document.createElement("strong")).textContent = "Create a repo on GitHub/GitLab";
 		steps.appendChild(document.createTextNode("\n"));

@@ -1,4 +1,6 @@
-import { Platform } from "obsidian";
+import { isMobile } from "../settings/platform";
+
+export { isMobile };
 
 /**
  * Safely retrieves a native Node.js or Electron module if available on the current platform.
@@ -10,7 +12,7 @@ import { Platform } from "obsidian";
 export function getNativeModule(
 	moduleName: "fs" | "path" | "os" | "crypto" | "child_process" | "electron",
 ): unknown {
-	if (Platform.isMobile) return null;
+	if (isMobile) return null;
 	const globalContext = globalThis as Record<string, unknown>;
 
 	if (typeof globalContext.require !== "function") {
@@ -33,4 +35,18 @@ export function getNativeModule(
 		);
 		return null;
 	}
+}
+
+/**
+ * Type-safe wrapper around getNativeModule that eliminates repetitive `as T` casts.
+ * Callers specify the expected interface via the generic parameter.
+ *
+ * @example
+ * const path = getModule<PathModule>("path");
+ */
+export function getModule<T>(moduleName: string): T | null {
+	const raw = getNativeModule(
+		moduleName as "fs" | "path" | "os" | "crypto" | "child_process" | "electron",
+	);
+	return (raw ?? null) as T | null;
 }

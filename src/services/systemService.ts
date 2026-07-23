@@ -1,6 +1,6 @@
-import { Notice, Platform } from "obsidian";
+import { Notice } from "obsidian";
 import type GitEncryptPlugin from "../main";
-import { getNativeModule } from "./nodeContext";
+import { getModule, isMobile } from "./nodeContext";
 
 /**
  * Minimal interface definition for the native Node.js 'child_process' module.
@@ -79,20 +79,19 @@ export class SystemService {
 	 *
 	 * @param cmd - The terminal shell command string to evaluate.
 	 * @param timeout - Maximum milliseconds before aborting (default 30_000).
-	 * @returns A promise resolving to the standard output string, or empty on failure.
+	 * @returns The command output on success, `""` if the command produced no output (success or failure),
+	 *          or `null` if the platform does not support execution (mobile / missing module).
 	 */
 	async execDesktopCommand(
 		cmd: string,
 		timeout: number = 30_000,
-	): Promise<string> {
-		if (Platform.isMobile) return "";
+	): Promise<string | null> {
+		if (isMobile) return null;
 
-		const rawModule = getNativeModule("child_process");
-		if (!rawModule) return "";
+		const childProcess = getModule<ChildProcessModule>("child_process");
+		if (!childProcess) return null;
 
-		const childProcess = rawModule as ChildProcessModule;
-
-		return new Promise<string>((resolve, reject) => {
+		return new Promise<string | null>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				const error = new Error(
 					`GitEncrypt: execDesktopCommand timed out after ${timeout}ms: ${cmd}`,
@@ -121,17 +120,13 @@ export class SystemService {
 	 * @returns A promise that resolves to the absolute path string, or null if undetected.
 	 */
 	async getGitSshKeyPath(): Promise<string | null> {
-		if (Platform.isMobile) return null;
+		if (isMobile) return null;
 
-		const rawPath = getNativeModule("path");
-		const rawFs = getNativeModule("fs");
-		const rawOs = getNativeModule("os");
+		const path = getModule<PathModule>("path");
+		const fs = getModule<FsModule>("fs")?.promises;
+		const os = getModule<OsModule>("os");
 
-		if (!rawPath || !rawFs || !rawOs) return null;
-
-		const path = rawPath as PathModule;
-		const fs = (rawFs as FsModule).promises;
-		const os = rawOs as OsModule;
+		if (!path || !fs || !os) return null;
 
 		try {
 			const sshCommand = await this.execDesktopCommand(
@@ -170,26 +165,30 @@ export class SystemService {
 	 * Retrieves the global Git user configuration signature (name and email).
 	 * Only executes on desktop platforms.
 	 *
-	 * @returns A promise containing the trimmed name and email strings.
+	 * @returns A promise containing name/email, or `null` for each field when
+	 *          the platform is unreachable (mobile) or Git has no config set.
 	 */
-	async getGitGlobalUser(): Promise<{ name: string; email: string }> {
-		if (Platform.isMobile) return { name: "", email: "" };
+	async getGitGlobalUser(): Promise<{
+		name: string | null;
+		email: string | null;
+	}> {
+		if (isMobile) return { name: null, email: null };
 
 		try {
-			const nameOut = await this.execDesktopCommand(
+			const nameOut = (await this.execDesktopCommand(
 				"git config --global user.name",
-			);
-			const emailOut = await this.execDesktopCommand(
+			)) ?? "";
+			const emailOut = (await this.execDesktopCommand(
 				"git config --global user.email",
-			);
+			)) ?? "";
 
 			return {
-				name: nameOut.trim(),
-				email: emailOut.trim(),
+				name: nameOut.trim() || null,
+				email: emailOut.trim() || null,
 			};
 		} catch (error) {
 			console.warn("Failed to get global git user:", error);
-			return { name: "", email: "" };
+			return { name: null, email: null };
 		}
 	}
 
@@ -201,12 +200,10 @@ export class SystemService {
 	 * @returns True if valid file exists and matches specifications, false otherwise.
 	 */
 	async checkMasterKeyFile(filePath: string): Promise<boolean> {
-		if (Platform.isMobile || !filePath) return false;
+		if (isMobile || !filePath) return false;
 
-		const rawFs = getNativeModule("fs");
-		if (!rawFs) return false;
-
-		const fs = (rawFs as FsModule).promises;
+		const fs = getModule<FsModule>("fs")?.promises;
+		if (!fs) return false;
 
 		try {
 			try {
@@ -234,17 +231,13 @@ export class SystemService {
 	async generateAndSaveMasterKeyFile(
 		filePath: string,
 	): Promise<string | null> {
-		if (Platform.isMobile || !filePath) return null;
+		if (isMobile || !filePath) return null;
 
-		const rawFs = getNativeModule("fs");
-		const rawCrypto = getNativeModule("crypto");
-		const rawPath = getNativeModule("path");
+		const fs = getModule<FsModule>("fs")?.promises;
+		const crypto = getModule<CryptoModule>("crypto");
+		const path = getModule<PathModule>("path");
 
-		if (!rawFs || !rawCrypto || !rawPath) return null;
-
-		const fs = (rawFs as FsModule).promises;
-		const crypto = rawCrypto as CryptoModule;
-		const path = rawPath as PathModule;
+		if (!fs || !crypto || !path) return null;
 
 		try {
 			const randomBytes = crypto.randomBytes(32);
@@ -269,24 +262,28 @@ export class SystemService {
 	}
 
 	/**
-	 * Encrypts and saves the master key hex to the system keychain using Electron safeStorage.
-	 * Automatically zero-outs plain-text values from standard memory scopes.
+	 * Encrypts the master key hex using Electron safeStorage.
+	 * Does NOT persist to plugin state — callers update settings themselves.
 	 * Only executes on desktop platforms.
 	 *
 	 * @param keyHex - The 64-character raw hex representation of the key.
-	 * @returns A promise resolving to true if saved successfully, false otherwise.
+	 * @returns A typed result: encrypted key string on success, error description on failure.
 	 */
-	async saveKeyToKeychain(keyHex: string): Promise<boolean> {
-		if (Platform.isMobile) return false;
+	async saveKeyToKeychain(
+		keyHex: string,
+	): Promise<SaveKeyToKeychainResult> {
+		if (isMobile) {
+			return { success: false, error: "Keychain unavailable on mobile" };
+		}
 
-		const rawElectron = getNativeModule("electron");
-		if (!rawElectron) return false;
-
-		const electron = rawElectron as ElectronModule;
+		const electron = getModule<ElectronModule>("electron");
+		if (!electron) {
+			return { success: false, error: "Electron module unavailable" };
+		}
 		const safeStorage = electron?.safeStorage;
 
 		if (!safeStorage?.isEncryptionAvailable()) {
-			return false;
+			return { success: false, error: "Keychain encryption not available" };
 		}
 
 		try {
@@ -294,18 +291,14 @@ export class SystemService {
 			const binaryString = Array.from(encryptedBuffer)
 				.map((b) => String.fromCodePoint(b))
 				.join("");
+			const encryptedKey = btoa(binaryString);
 
-			this.plugin.settings.encryptedMasterKey = btoa(binaryString);
-			this.plugin.settings.masterKeySource = "keychain";
-
-			await this.plugin.saveSettings();
-
-			this.plugin.settings.masterKeyHex = "";
-
-			return true;
+			return { success: true, encryptedKey };
 		} catch (error) {
 			console.error("GitEncrypt: Failed to save key to keychain", error);
-			return false;
+			const message =
+				error instanceof Error ? error.message : String(error);
+			return { success: false, error: message };
 		}
 	}
 
@@ -317,7 +310,7 @@ export class SystemService {
 	 *          between `locked`, `corrupted`, and `unknown` failure modes.
 	 */
 	async loadKeyFromKeychain(): Promise<KeychainLoadResult> {
-		if (Platform.isMobile || !this.plugin.settings.encryptedMasterKey) {
+		if (isMobile || !this.plugin.settings.encryptedMasterKey) {
 			return {
 				success: false,
 				error: "unknown",
@@ -325,16 +318,14 @@ export class SystemService {
 			};
 		}
 
-		const rawElectron = getNativeModule("electron");
-		if (!rawElectron) {
+		const electron = getModule<ElectronModule>("electron");
+		if (!electron) {
 			return {
 				success: false,
 				error: "unknown",
 				details: "Electron module unavailable",
 			};
 		}
-
-		const electron = rawElectron as ElectronModule;
 		const safeStorage = electron?.safeStorage;
 
 		if (!safeStorage?.isEncryptionAvailable()) {
@@ -358,6 +349,14 @@ export class SystemService {
 		}
 	}
 }
+
+/**
+ * Result of encrypting and saving a master key to the system keychain.
+ * Returns the encrypted payload on success for the caller to persist.
+ */
+export type SaveKeyToKeychainResult =
+	| { success: true; encryptedKey: string }
+	| { success: false; error: string };
 
 /**
  * Result of attempting to load a master key from the system keychain.

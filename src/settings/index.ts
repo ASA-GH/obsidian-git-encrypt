@@ -16,7 +16,7 @@ export { DEFAULT_SETTINGS } from "./defaults";
  * encryption keys, and advanced automation sections.
  */
 export class GitEncryptSettingTab extends PluginSettingTab {
-	plugin: GitEncryptPlugin;
+	readonly plugin: GitEncryptPlugin;
 
 	constructor(app: App, plugin: GitEncryptPlugin) {
 		super(app, plugin);

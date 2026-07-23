@@ -24,10 +24,11 @@ graph TD
 
     subgraph Services
         SS[systemService.ts - SystemService]
-        NC[nodeContext.ts - getNativeModule]
+        NC[nodeContext.ts - getNativeModule, getModule<T>]
     end
 
     subgraph Shared
+        PL[platform.ts - isMobile, isMobilePlatform]
         UI[ui.ts - createSettingGroup]
     end
 
@@ -44,15 +45,19 @@ graph TD
     SI --> SK
     SI --> SX
 
-    %% Section → Services (only these 3 call plugin.sys)
-    SA --> SS
-    SZ --> SS
-    SK --> SS
+    %% Section → Services (4 sections call plugin.sys for desktop operations)
+    SA -.-> SS
+    SZ -.-> SS
+    SK -.-> SS
 
     %% Services chain
     SS --> NC
 
-    %% Shared utilities — all sections import ui.ts directly
+    %% Shared — sections import platform.ts (isMobilePlatform) and ui.ts
+    SR -.-> PL
+    SA -.-> PL
+    SZ -.-> PL
+    SK -.-> PL
     SR -.-> UI
     SA -.-> UI
     SZ -.-> UI
@@ -62,8 +67,9 @@ graph TD
 
 > [!NOTE]
 > All 5 sections import `createSettingGroup` from `ui.ts` directly (dashed arrows).
-> `authentication.ts` does not call `SystemService` — UI only.
+> `authentication.ts`, `author.ts`, `masterKey.ts` call `SystemService` via `plugin.sys` for desktop-only operations (`getGitSshKeyPath`, `getGitGlobalUser`, `saveKeyToKeychain`, `checkMasterKeyFile`).
 > `author.ts`, `masterKey.ts`, `repository.ts`, `advanced.ts` do not import `types.ts`/`defaults.ts` directly — types flow through `main.ts`.
+> `authentication.ts` still imports `Platform` directly from Obsidian (task 11 pending).
 
 ## Shared vs Platform-Specific
 
@@ -79,9 +85,9 @@ graph TD
 ## Data Flow: Settings Save
 
 1. User changes a setting in any section
-2. Change handler calls `this.loadData().then(s => { s.field = value; this.saveData(s) })`
-3. `saveData()` serializes to `data.json`
-4. On next plugin load, `loadSettings()` merges saved data with `DEFAULT_SETTINGS`
+2. `onChange` handler mutates `plugin.settings.field` directly and calls `await plugin.saveSettings()`
+3. `saveSettings()` delegates to Obsidian's `this.saveData(this.settings)` (JSON serialization)
+4. On next plugin load, `loadSettings()` calls `this.loadData()` and merges with `DEFAULT_SETTINGS`
 
 ## Data Flow: Keychain (Desktop)
 
@@ -90,3 +96,15 @@ graph TD
 3. `saveKeyToKeychain()` encrypts and stores via Electron `safeStorage`
 4. On next startup, `loadKeyFromKeychain()` decrypts and sets the key
 5. If decryption fails, key falls back to empty (user re-enters manually)
+
+## Platform Abstraction
+
+| Layer | File | Export | Usage |
+|-------|------|--------|-------|
+| **Platform detection** | `settings/platform.ts` | `isMobile`, `isMobilePlatform` | Sections check mobile guards |
+| **Module loader** | `services/nodeContext.ts` | `getNativeModule()`, `getModule<T>()` | Desktop-only Node/Electron modules |
+
+- `platform.ts` is the single import point for `Platform.isMobile`. Sections import `isMobilePlatform` from `platform.ts`.
+- `nodeContext.ts` re-exports `isMobile` from `platform.ts` and wraps it in `getNativeModule()` / `getModule<T>()` for safe Node.js module loading.
+- `getModule<T>()` eliminates repetitive `as T` casts — callers specify the expected interface via the generic parameter.
+- `authentication.ts` still imports `Platform` directly from Obsidian (task 11 pending).

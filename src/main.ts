@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Notice, Plugin } from "obsidian";
 import {
 	GitEncryptSettingTab,
 	GitEncryptSettings,
@@ -47,13 +47,37 @@ export default class GitEncryptPlugin extends Plugin {
 		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
 
 		if (this.settings.masterKeySource === "keychain") {
-			const decryptedKey = await this.sys.loadKeyFromKeychain();
-			if (decryptedKey) {
-				this.settings.masterKeyHex = decryptedKey;
+			const result = await this.sys.loadKeyFromKeychain();
+			if (result.success) {
+				this.settings.masterKeyHex = result.key;
 			} else {
-				console.error(
-					"GitEncrypt: Secure storage unlock aborted. Master key is unresolvable.",
-				);
+				this.settings.masterKeySource = "manual";
+				this.settings.masterKeyHex = "";
+				await this.saveSettings();
+
+				switch (result.error) {
+					case "locked":
+						new Notice(
+							"Git Encrypt: System keychain is locked. " +
+								"Unlock your OS login/session and restart Obsidian, " +
+								"or switch to manual key entry in settings.",
+						);
+						break;
+					case "corrupted":
+						new Notice(
+							"Git Encrypt: The keychain data is corrupted or was encrypted with a different key. " +
+								"Switching to manual entry — you'll need to re-save your master key to the keychain " +
+								"after entering it manually.",
+							10_000,
+						);
+						break;
+					default:
+						new Notice(
+							"Git Encrypt: Unable to read the keychain. " +
+								"Switching to manual key entry.",
+						);
+						break;
+				}
 			}
 		}
 	}

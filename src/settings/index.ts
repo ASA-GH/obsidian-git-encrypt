@@ -7,6 +7,7 @@ import { renderMasterKeySection } from "./sections/masterKey";
 import { renderAdvancedSection } from "./sections/advanced";
 
 export type { GitEncryptSettings } from "./types";
+export type { KeychainLoadResult } from "../services/systemService";
 export { DEFAULT_SETTINGS } from "./defaults";
 
 /**

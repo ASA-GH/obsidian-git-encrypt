@@ -50,14 +50,13 @@ interface CryptoModule {
 
 /**
  * Minimal interface definition for the runtime Electron context and safeStorage APIs.
+ * Matches current Obsidian desktop environments where 'remote' is removed.
  */
 interface ElectronModule {
-	remote?: {
-		safeStorage?: {
-			isEncryptionAvailable: () => boolean;
-			encryptString: (str: string) => Uint8Array;
-			decryptString: (buf: Uint8Array) => string;
-		};
+	safeStorage?: {
+		isEncryptionAvailable: () => boolean;
+		encryptString: (str: string) => Uint8Array;
+		decryptString: (buf: Uint8Array) => string;
 	};
 }
 
@@ -76,12 +75,16 @@ export class SystemService {
 
 	/**
 	 * Executes a shell command on desktop platforms using the dynamic NodeJS context.
-	 * Safely swallows errors and returns stdout, or an empty string on failure.
+	 * Rejects with a descriptive error if the command exceeds the timeout (default 30s).
 	 *
 	 * @param cmd - The terminal shell command string to evaluate.
-	 * @returns A promise resolving to the standard output string, trimmed or empty on failure.
+	 * @param timeout - Maximum milliseconds before aborting (default 30_000).
+	 * @returns A promise resolving to the standard output string, or empty on failure.
 	 */
-	async execDesktopCommand(cmd: string): Promise<string> {
+	async execDesktopCommand(
+		cmd: string,
+		timeout: number = 30_000,
+	): Promise<string> {
 		if (Platform.isMobile) return "";
 
 		const rawModule = getNativeModule("child_process");
@@ -89,15 +92,25 @@ export class SystemService {
 
 		const childProcess = rawModule as ChildProcessModule;
 
-		try {
-			return await new Promise<string>((resolve) => {
-				childProcess.exec(cmd, (_err: unknown, stdout: string) => {
-					resolve(stdout || "");
-				});
+		return new Promise<string>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				const error = new Error(
+					`GitEncrypt: execDesktopCommand timed out after ${timeout}ms: ${cmd}`,
+				);
+				reject(error);
+			}, timeout);
+
+			childProcess.exec(cmd, (err: unknown, stdout: string) => {
+				clearTimeout(timer);
+				if (err) {
+					console.error(
+						`GitEncrypt: execDesktopCommand failed: ${cmd}`,
+						err,
+					);
+				}
+				resolve(stdout || "");
 			});
-		} catch {
-			return "";
-		}
+		});
 	}
 
 	/**
@@ -270,7 +283,7 @@ export class SystemService {
 		if (!rawElectron) return false;
 
 		const electron = rawElectron as ElectronModule;
-		const safeStorage = electron.remote?.safeStorage;
+		const safeStorage = electron?.safeStorage;
 
 		if (!safeStorage?.isEncryptionAvailable()) {
 			return false;
@@ -283,10 +296,12 @@ export class SystemService {
 				.join("");
 
 			this.plugin.settings.encryptedMasterKey = btoa(binaryString);
-			this.plugin.settings.masterKeyHex = "";
 			this.plugin.settings.masterKeySource = "keychain";
 
 			await this.plugin.saveSettings();
+
+			this.plugin.settings.masterKeyHex = "";
+
 			return true;
 		} catch (error) {
 			console.error("GitEncrypt: Failed to save key to keychain", error);
@@ -294,25 +309,40 @@ export class SystemService {
 		}
 	}
 
-	/**
+/**
 	 * Decrypts and resolves the master key hex string from the System Keychain using Electron safeStorage.
 	 * Only executes on desktop platforms.
 	 *
-	 * @returns A promise resolving to the decrypted 64-character hex key string, or empty string on failure.
+	 * @returns A promise resolving to a `KeychainLoadResult` discriminated union that distinguishes
+	 *          between `locked`, `corrupted`, and `unknown` failure modes.
 	 */
-	async loadKeyFromKeychain(): Promise<string> {
+	async loadKeyFromKeychain(): Promise<KeychainLoadResult> {
 		if (Platform.isMobile || !this.plugin.settings.encryptedMasterKey) {
-			return "";
+			return {
+				success: false,
+				error: "unknown",
+				details: "No encrypted key available",
+			};
 		}
 
 		const rawElectron = getNativeModule("electron");
-		if (!rawElectron) return "";
+		if (!rawElectron) {
+			return {
+				success: false,
+				error: "unknown",
+				details: "Electron module unavailable",
+			};
+		}
 
 		const electron = rawElectron as ElectronModule;
-		const safeStorage = electron.remote?.safeStorage;
+		const safeStorage = electron?.safeStorage;
 
 		if (!safeStorage?.isEncryptionAvailable()) {
-			return "";
+			return {
+				success: false,
+				error: "unknown",
+				details: "Keychain encryption not available",
+			};
 		}
 
 		try {
@@ -321,13 +351,63 @@ export class SystemService {
 				binaryString.split("").map((char) => char.codePointAt(0) ?? 0),
 			);
 
-			return safeStorage.decryptString(uint8Array);
+			const key = safeStorage.decryptString(uint8Array);
+			return { success: true, key };
 		} catch (error) {
-			console.error(
-				"GitEncrypt: Failed to load or decrypt key from keychain",
-				error,
-			);
-			return "";
+			return classifyKeychainError(error);
 		}
 	}
+}
+
+/**
+ * Result of attempting to load a master key from the system keychain.
+ * Discriminates between recoverable (locked) and terminal (corrupted) failures.
+ */
+export type KeychainLoadResult =
+	| { success: true; key: string }
+	| { success: false; error: "locked"; details: string }
+	| { success: false; error: "corrupted"; details: string }
+	| { success: false; error: "unknown"; details: string };
+
+/**
+ * Classifies an Electron safeStorage decryption error into a human-readable
+ * and machine-distinguishable category.
+ *
+ * - `"locked"` — the OS keychain is locked; the user should unlock it and try again.
+ * - `"corrupted"` — the stored payload cannot be decrypted (mismatched encrypt/decrypt
+ *   keys, data corruption, or format mismatch).
+ * - `"unknown"` — anything else (permission denied, missing entitlements, etc.).
+ */
+function classifyKeychainError(error: unknown): KeychainLoadResult {
+	const msg = error instanceof Error ? error.message : String(error);
+	const lower = msg.toLowerCase();
+
+	if (
+		lower.includes("lock") ||
+		lower.includes("unlock") ||
+		lower.includes("locked") ||
+		lower.includes("auth")
+	) {
+		console.warn(
+			"GitEncrypt: System keychain is locked; unlock it and retry.",
+		);
+		return { success: false, error: "locked", details: msg };
+	}
+
+	if (
+		lower.includes("decrypt") ||
+		lower.includes("corrupt") ||
+		lower.includes("invalid") ||
+		lower.includes("malformed") ||
+		lower.includes("mismatch")
+	) {
+		console.warn(
+			"GitEncrypt: Keychain payload appears corrupted or is encrypted with a different key. " +
+				"The user will need to re-save their key to the keychain.",
+		);
+		return { success: false, error: "corrupted", details: msg };
+	}
+
+	console.error("GitEncrypt: Unexpected keychain error", error);
+	return { success: false, error: "unknown", details: msg };
 }

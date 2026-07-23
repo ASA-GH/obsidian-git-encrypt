@@ -19,6 +19,22 @@ export async function renderMasterKeySection(
 ): Promise<void> {
 	const itemEl = createSettingGroup(containerEl, "Encryption master key");
 
+	// How-it-works callout — explains zero-knowledge model before storage options.
+	const calloutEl = itemEl.createDiv({
+		cls: "callout callout-info",
+		attr: { role: "note" },
+	});
+	calloutEl.createDiv({ cls: "callout-icon" }).innerHTML =
+		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>';
+	calloutEl.createDiv({
+		cls: "callout-title",
+		text: "How encryption works",
+	});
+	calloutEl.createDiv({
+		cls: "callout-content",
+		text: "Your master key encrypts every note before it leaves your device. Neither the Git remote nor the plugin authors can read your data. Choose how you want to store the key below.",
+	});
+
 	if (Platform.isMobile) {
 		if (plugin.settings.masterKeySource !== "manual") {
 			plugin.settings.masterKeySource = "manual";
@@ -32,9 +48,18 @@ export async function renderMasterKeySection(
 			)
 			.addDropdown((dropdown) =>
 				dropdown
-					.addOption("keychain", "System keychain (recommended)")
-					.addOption("file", "Read from file")
-					.addOption("manual", "Enter manually")
+					.addOption(
+						"keychain",
+						"System Keychain — stored in your OS's encrypted credential vault (macOS Keychain / Windows Credential Manager / Linux Secret Service)",
+					)
+					.addOption(
+						"file",
+						"Key File — read from an external file on your computer",
+					)
+					.addOption(
+						"manual",
+						"Enter Manually — type or paste the hex key directly",
+					)
 					.setValue(plugin.settings.masterKeySource)
 					.onChange(async (val: "keychain" | "file" | "manual") => {
 						plugin.settings.masterKeySource = val;
@@ -141,11 +166,41 @@ export async function renderMasterKeySection(
 				text.setPlaceholder("Enter a 64-character hex string...")
 					.setValue(plugin.settings.masterKeyHex)
 					.onChange(async (val) => {
-						plugin.settings.masterKeyHex = val.trim();
+						const trimmed = val.trim();
+						if (trimmed.length > 0 && !/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+							new Notice("Master key must be exactly 64 hexadecimal characters.");
+							return;
+						}
+						plugin.settings.masterKeyHex = trimmed;
 						await plugin.saveSettings();
 					});
 				text.inputEl.type = "password";
 			});
+
+		keySetting.addButton((btn) =>
+			btn.setButtonText("Load key").onClick(async () => {
+				const text = await navigator.clipboard.readText();
+				const trimmed = text.trim();
+				if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+					new Notice("Clipboard does not contain a valid 64-character hex key.");
+					return;
+				}
+				plugin.settings.masterKeyHex = trimmed;
+				await plugin.saveSettings();
+				await plugin.refreshSettingsTab();
+			}),
+		);
+
+		keySetting.addButton((btn) =>
+			btn.setButtonText("Copy").onClick(async () => {
+				if (plugin.settings.masterKeyHex.length !== 64) {
+					new Notice("No key to copy — enter or generate one first.");
+					return;
+				}
+				await navigator.clipboard.writeText(plugin.settings.masterKeyHex);
+				new Notice("Key copied to clipboard.");
+			}),
+		);
 
 		keySetting.addButton((btn) =>
 			btn.setButtonText("Generate key").onClick(async () => {

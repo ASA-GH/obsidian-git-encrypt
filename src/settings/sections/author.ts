@@ -1,4 +1,4 @@
-import { Setting, Platform } from "obsidian";
+import { Setting, Platform, Notice } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 import { createSettingGroup } from "../ui";
 
@@ -68,7 +68,12 @@ export async function renderAuthorSection(
 				text
 					.setValue(plugin.settings.authorEmail)
 					.onChange(async (val) => {
-						plugin.settings.authorEmail = val.trim();
+						const trimmed = val.trim();
+						if (trimmed.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+							new Notice("Author email must contain '@' and a domain part.");
+							return;
+						}
+						plugin.settings.authorEmail = trimmed;
 						await plugin.saveSettings();
 					}),
 			);

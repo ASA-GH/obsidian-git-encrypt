@@ -32,6 +32,7 @@ export default class GitEncryptPlugin extends Plugin {
 		this.sys = new SystemService(this);
 		this.settingsTab = new GitEncryptSettingTab(this.app, this);
 		this.addSettingTab(this.settingsTab);
+
 	}
 
 	/**

@@ -46,7 +46,13 @@ export function getNativeModule(
  */
 export function getModule<T>(moduleName: string): T | null {
 	const raw = getNativeModule(
-		moduleName as "fs" | "path" | "os" | "crypto" | "child_process" | "electron",
+		moduleName as
+			| "fs"
+			| "path"
+			| "os"
+			| "crypto"
+			| "child_process"
+			| "electron",
 	);
 	return (raw ?? null) as T | null;
 }

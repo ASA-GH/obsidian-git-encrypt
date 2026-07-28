@@ -1,4 +1,3 @@
-import { Notice } from "obsidian";
 import type GitEncryptPlugin from "../main";
 import { getModule, isMobile } from "./nodeContext";
 
@@ -175,12 +174,14 @@ export class SystemService {
 		if (isMobile) return { name: null, email: null };
 
 		try {
-			const nameOut = (await this.execDesktopCommand(
-				"git config --global user.name",
-			)) ?? "";
-			const emailOut = (await this.execDesktopCommand(
-				"git config --global user.email",
-			)) ?? "";
+			const nameOut =
+				(await this.execDesktopCommand(
+					"git config --global user.name",
+				)) ?? "";
+			const emailOut =
+				(await this.execDesktopCommand(
+					"git config --global user.email",
+				)) ?? "";
 
 			return {
 				name: nameOut.trim() || null,
@@ -254,9 +255,7 @@ export class SystemService {
 			return hex;
 		} catch (error) {
 			console.error("Failed to generate or save master key file:", error);
-			const message =
-				error instanceof Error ? error.message : String(error);
-			new Notice(`Master key storage error: ${message}`);
+			// No Notice — callers display user-facing errors.
 			return null;
 		}
 	}
@@ -269,9 +268,7 @@ export class SystemService {
 	 * @param keyHex - The 64-character raw hex representation of the key.
 	 * @returns A typed result: encrypted key string on success, error description on failure.
 	 */
-	async saveKeyToKeychain(
-		keyHex: string,
-	): Promise<SaveKeyToKeychainResult> {
+	async saveKeyToKeychain(keyHex: string): Promise<SaveKeyToKeychainResult> {
 		if (isMobile) {
 			return { success: false, error: "Keychain unavailable on mobile" };
 		}
@@ -283,7 +280,10 @@ export class SystemService {
 		const safeStorage = electron?.safeStorage;
 
 		if (!safeStorage?.isEncryptionAvailable()) {
-			return { success: false, error: "Keychain encryption not available" };
+			return {
+				success: false,
+				error: "Keychain encryption not available",
+			};
 		}
 
 		try {
@@ -302,7 +302,7 @@ export class SystemService {
 		}
 	}
 
-/**
+	/**
 	 * Decrypts and resolves the master key hex string from the System Keychain using Electron safeStorage.
 	 * Only executes on desktop platforms.
 	 *

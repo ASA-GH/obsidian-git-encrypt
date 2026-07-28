@@ -1,6 +1,6 @@
 import { App, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
-import { createSettingGroup, renderCallout } from "../ui";
+import { createSettingGroup, renderCallout, renderWarningCallout } from "../ui";
 
 /**
  * Renders advanced automation and synchronization settings.
@@ -17,6 +17,13 @@ export async function renderAdvancedSection(
 	app: App,
 ): Promise<void> {
 	const itemEl = createSettingGroup(containerEl, "Advanced settings");
+
+	// Migration warning — local files become encrypted after first pull.
+	renderWarningCallout(
+		itemEl,
+		"Local files will be encrypted",
+		"After your first pull, your `.md` files in the vault will contain encrypted binary data. This is expected — the plugin decrypts them on-the-fly in Obsidian. Your files in the OS file manager will look unreadable without the master key.",
+	);
 
 	// Sync explanation — clarifies what git-remote-crypto does on push/pull.
 	renderCallout(

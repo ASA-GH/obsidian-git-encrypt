@@ -1,6 +1,6 @@
 import { App, Notice, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
-import { createSettingGroup, renderCallout } from "../ui";
+import { createSettingGroup, renderCallout, renderWarningCallout } from "../ui";
 import { isValidHexKey } from "../validators";
 import { isMobilePlatform } from "../platform";
 
@@ -26,6 +26,13 @@ export async function renderMasterKeySection(
 		itemEl,
 		"How encryption works",
 		"Your master key encrypts every note before it leaves your device. Neither the Git remote nor the plugin authors can read your data. Choose how you want to store the key below.",
+	);
+
+	// Key preservation warning — without the key, files are permanently unreadable.
+	renderWarningCallout(
+		itemEl,
+		"Save your key before syncing",
+		"Without the master key, your local vault files become permanently unreadable. Make sure your key is saved — either in your OS keychain, copied to a secure location, or written down — before performing your first push or pull.",
 	);
 
 	if (isMobilePlatform) {

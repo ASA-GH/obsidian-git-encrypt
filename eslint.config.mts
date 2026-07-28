@@ -18,7 +18,15 @@ export default tseslint.config(
 			},
 			parserOptions: {
 				projectService: {
-					allowDefaultProject: ["eslint.config.js", "manifest.json"],
+					allowDefaultProject: [
+						"eslint.config.js",
+						"manifest.json",
+						"vitest.config.ts",
+						"__tests__/repository.test.ts",
+						"__tests__/setup.ts",
+						"__tests__/systemService.test.ts",
+						"__tests__/validators.test.ts",
+					],
 				},
 				tsconfigRootDir: projectRoot,
 				extraFileExtensions: [".json"],

@@ -1,99 +1,105 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Notice, Plugin } from "obsidian";
+import {
+	GitEncryptSettingTab,
+	GitEncryptSettings,
+	DEFAULT_SETTINGS,
+} from "./settings";
+import { SystemService } from "./services/systemService";
 
-// Remember to rename these classes and interfaces!
+/**
+ * Main entry point for the Git Encrypt Obsidian plugin.
+ * Coordinates the plugin lifecycle, setting persistence, view orchestration,
+ * and initializes platform-specific core system services.
+ */
+export default class GitEncryptPlugin extends Plugin {
+	/** Active plugin configuration state */
+	settings: GitEncryptSettings;
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+	/** Managed UI instance for the Obsidian settings tab view */
+	settingsTab: GitEncryptSettingTab;
 
-	async onload() {
+	/** Encapsulated business logic service for native OS/NodeJS and cryptographic operations */
+	sys: SystemService;
+
+	/**
+	 * Executes on plugin activation.
+	 * Boots internal configurations, binds decoupled services, and mounts the application settings UI.
+	 *
+	 * @returns A promise that resolves when full initialization is complete.
+	 */
+	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.sys = new SystemService(this);
+		this.settingsTab = new GitEncryptSettingTab(this.app, this);
+		this.addSettingTab(this.settingsTab);
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+	}
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+	/**
+	 * Loads saved metadata configuration from Obsidian's transactional local storage backend.
+	 * Merges state smoothly into standard configuration defaults for fallback safety.
+	 *
+	 * @returns A promise that resolves when configuration state is populated.
+	 */
+	async loadSettings(): Promise<void> {
+		const loadedData =
+			(await this.loadData()) as Partial<GitEncryptSettings> | null;
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+		this.settings = { ...DEFAULT_SETTINGS, ...loadedData };
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
+		if (this.settings.masterKeySource === "keychain") {
+			const result = await this.sys.loadKeyFromKeychain();
+			if (result.success) {
+				this.settings.masterKeyHex = result.key;
+			} else {
+				this.settings.masterKeySource = "manual";
+				this.settings.masterKeyHex = "";
+				await this.saveSettings();
+
+				switch (result.error) {
+					case "locked":
+						new Notice(
+							"Git Encrypt: System keychain is locked. " +
+								"Unlock your OS login/session and restart Obsidian, " +
+								"or switch to manual key entry in settings.",
+						);
+						break;
+					case "corrupted":
+						new Notice(
+							"Git Encrypt: The keychain data is corrupted or was encrypted with a different key. " +
+								"Switching to manual entry — you'll need to re-save your master key to the keychain " +
+								"after entering it manually.",
+							10_000,
+						);
+						break;
+					default:
+						new Notice(
+							"Git Encrypt: Unable to read the keychain. " +
+								"Switching to manual key entry.",
+						);
+						break;
 				}
-				return false;
 			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-
+		}
 	}
 
-	onunload() {
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
-	}
-
-	async saveSettings() {
+	/**
+	 * Persists the current configuration schema snapshot into disk-backed storage (`data.json`).
+	 *
+	 * @returns A promise that resolves once serialization and write pipeline operations succeed.
+	 */
+	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 	}
-}
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
+	/**
+	 * Forces an instantaneous redrawing of the plugin configuration workspace panel if it is actively visible.
+	 *
+	 * @returns A promise that resolves after the view finishes rendering changes.
+	 */
+	async refreshSettingsTab(): Promise<void> {
+		if (this.settingsTab) {
+			this.settingsTab.display();
+		}
 	}
 }

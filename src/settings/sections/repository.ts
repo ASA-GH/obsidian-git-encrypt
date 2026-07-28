@@ -1,40 +1,8 @@
 import { Notice, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
-import { createSettingGroup } from "../ui";
+import { createSettingGroup, renderWarningCallout } from "../ui";
 import { isMobilePlatform } from "../platform";
-
-/**
- * Result of validating a repository URL against the selected transport protocol.
- */
-type ValidationResult =
-	| { valid: true }
-	| { valid: false; message: string };
-
-const EXPECTED_PREFIXES: Record<"https" | "ssh", string> = {
-	https: "https://",
-	ssh: "git@",
-};
-
-/**
- * Validates a repository URL against the selected transport protocol.
- * Pure function — no side effects. Callers decide how to surface errors.
- */
-function validateRepositoryUrl(
-	repositoryUrl: string,
-	transportType: "https" | "ssh",
-): ValidationResult {
-	const trimmed = repositoryUrl.trim();
-	if (!trimmed) return { valid: true };
-
-	const expectedPrefix = EXPECTED_PREFIXES[transportType];
-	if (!trimmed.startsWith(expectedPrefix)) {
-		return {
-			valid: false,
-			message: `Invalid ${transportType} url: must start with ${expectedPrefix}`,
-		};
-	}
-	return { valid: true };
-}
+import { validateRepositoryUrl } from "../validators";
 
 /**
  * Renders the repository connection settings section.
@@ -50,25 +18,37 @@ export async function renderRepositorySection(
 ): Promise<void> {
 	const itemEl = createSettingGroup(containerEl, "Repository connection");
 
-	if (!plugin.settings.repositoryUrl.trim()) {
-		const infoEl = itemEl.createEl("div", {
-			cls: ["callout", "is-collapsible"],
-			attr: { "data-callout": "info" },
-		});
-		infoEl.createEl("div", { cls: "callout-title" }).createSpan({
-			text: "Encrypted remote repository",
-		});
-		const bodyEl = infoEl.createEl("div", { cls: "callout-content" });
-		bodyEl.createEl("p", {
-			text: "This plugin pushes encrypted blobs to the remote. "
-				+ "Create the repository first, then paste its URL below. "
-				+ "The remote will never contain plaintext notes.",
-		});
-		bodyEl.createEl("a", {
-			href: "https://github.com/antonmedv/obsidian-git-encrypt/blob/main/README.md",
-			text: "Learn more about how encryption works →",
-		});
+	// Warn when connecting an existing repository that already has data.
+	if (plugin.settings.repositoryUrl.trim()) {
+		renderWarningCallout(
+			itemEl,
+			"Existing repository detected",
+			"You are connecting to a repository that already contains data. Your local vault files may be overwritten on the next pull. Make a backup of your vault before proceeding.",
+		);
 	}
+
+	// Re-add encrypted remote explanation when the setup flow is designed.
+	// Hidden for now — the callout only shows when repositoryUrl is empty,
+	// and users who paste a URL first never see it.
+	// if (!plugin.settings.repositoryUrl.trim()) {
+	// 	const infoEl = itemEl.createEl("div", {
+	// 		cls: ["callout", "is-collapsible"],
+	// 		attr: { "data-callout": "info" },
+	// 	});
+	// 	infoEl.createEl("div", { cls: "callout-title" }).createSpan({
+	// 		text: "Encrypted remote repository",
+	// 	});
+	// 	const bodyEl = infoEl.createEl("div", { cls: "callout-content" });
+	// 	bodyEl.createEl("p", {
+	// 		text: "This plugin pushes encrypted blobs to the remote. "
+	// 			+ "Create the repository first, then paste its URL below. "
+	// 			+ "The remote will never contain plaintext notes.",
+	// 	});
+	// 	bodyEl.createEl("a", {
+	// 		href: "https://github.com/antonmedv/obsidian-git-encrypt/blob/main/README.md",
+	// 		text: "Learn more about how encryption works →",
+	// 	});
+	// }
 
 	new Setting(itemEl)
 		.setName("Transport protocol")
@@ -82,6 +62,10 @@ export async function renderRepositorySection(
 					plugin.settings.transportType = val;
 					await plugin.saveSettings();
 					await plugin.refreshSettingsTab();
+					// Directly update visible elements in case the tab re-render
+					// doesn't pick up the change (Obsidian Setting uses innerHTML
+					// and may not restore state after empty()).
+					updateProtocolVisuals(dropdown, plugin);
 				}),
 		);
 
@@ -96,7 +80,8 @@ export async function renderRepositorySection(
 	if (!plugin.settings.repositoryUrl.trim()) {
 		frag.append(document.createTextNode("\n"));
 		const steps = frag.appendChild(document.createElement("div"));
-		steps.addClass("list list-numbers");
+		steps.addClass("list");
+		steps.addClass("list-numbers");
 		steps.appendChild(document.createTextNode("1. "));
 		steps.appendChild(document.createElement("strong")).textContent = "Create a repo on GitHub/GitLab";
 		steps.appendChild(document.createTextNode("\n"));
@@ -167,5 +152,41 @@ export async function renderRepositorySection(
 						await plugin.saveSettings();
 					}),
 			);
+	}
+}
+
+/**
+ * Updates the URL field's description and placeholder to reflect the new protocol.
+ * Called after transport type changes to ensure visual feedback even if the
+ * tab re-render doesn't pick up the change (Obsidian Setting uses innerHTML).
+ */
+function updateProtocolVisuals(
+	_dropdown: unknown,
+	plugin: GitEncryptPlugin,
+): void {
+	const transport = plugin.settings.transportType;
+	const isSsh = transport === "ssh";
+	const containerEl = document.querySelector(".setting-group");
+	if (!containerEl) return;
+
+	// Find all setting items with text inputs, pick the one whose placeholder
+	// contains a URL pattern (the Repository URL field).
+	const items = Array.from(containerEl.querySelectorAll(".setting-item"));
+	for (const item of items) {
+		const input = item.querySelector("input");
+		if (!input) continue;
+		const nameEl = item.querySelector(".setting-item-name");
+		if (!nameEl || nameEl.textContent !== "Repository URL") continue;
+
+		const descEl = item.querySelector(".setting-item-description");
+		if (descEl) {
+			descEl.innerHTML = isSsh
+				? "SSH address (e.g., git@github.com:user/repo.git)"
+				: "HTTPS address (e.g., https://github.com/user/repo.git)";
+		}
+		input.placeholder = isSsh
+			? "git@github.com:user/repo.git"
+			: "https://github.com/user/repo.git";
+		break;
 	}
 }

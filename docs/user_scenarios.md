@@ -10,7 +10,7 @@ User-facing flows for every settings category in the Git Encrypt plugin. Each sc
 - User opens settings → selects transport protocol (HTTPS / SSH)
 - User enters repo URL, branch, remote name
 - User optionally picks a local path for the bare repo
-- **UI redraws** when switching between HTTPS and SSH
+- ~~**UI redraws** when switching between HTTPS and SSH~~ — **BUG**: dropdown onChange calls `refreshSettingsTab()` but visual change not confirmed (see Verification task #2)
 
 ### Mobile
 - Same as desktop but with fewer path-related options
@@ -122,11 +122,10 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 
 **Current behavior:**
 - Settings tab shows empty `repositoryUrl` with static placeholder text
-- No indication that the remote must pre-exist
-- No link to documentation explaining the encrypted remote concept
-- No "Help me set up" flow
+- **Info callout rendered when `repositoryUrl` is empty** (repository.ts:53-71) — explains encrypted remote concept, links to documentation
+- Placeholder text on URL field includes 2-step setup guidance (create repo → paste URL)
 
-**Gap:** User has no guidance that they must create a *regular* (unencrypted) Git remote first, then configure the plugin to encrypt traffic to it. The settings tab is silent about this prerequisite.
+**Remaining gap:** Callout only shows when `repositoryUrl` is empty — users with a saved URL see nothing. Consider showing it persistently or as a collapsible section.
 
 **Platform note:** Same for all platforms — no platform-specific difference here.
 
@@ -142,11 +141,10 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 - The local `.git-encrypted` directory replaces the traditional `.git` directory
 
 **Current behavior:**
-- No explanation of what `git-remote-crypto` does
-- No visual hint that the remote will look different from a normal GitHub repo
-- `createSettingGroup` shows only the title — no collapsible "how it works" section
+- Info callout rendered when `repositoryUrl` is empty (repository.ts:53-71) — explains that remote will contain only encrypted blobs
+- Placeholder text on URL field includes 2-step setup guidance
 
-**Gap:** Zero educational content in the UI. A user unfamiliar with `git-remote-crypto` will not understand why the remote contains unreadable files.
+**Remaining gap:** Callout is hidden once the user enters a URL. Users who paste a URL first never see the explanation. Consider a persistent or collapsible section.
 
 ---
 
@@ -162,11 +160,11 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 - "What if I'm using GitLab / Gitea / self-hosted?"
 
 **Current behavior:**
-- Placeholder shows example URL format but doesn't explain where to create the repo
-- No link to a setup guide
-- No differentiation between platforms (GitHub vs GitLab vs self-hosted)
+- Placeholder shows example URL format
+- Info callout (when visible) links to README explaining encryption
+- URL field description includes step-by-step: "1. Create a repo on GitHub/GitLab → 2. Paste the URL"
 
-**Gap:** The settings UI assumes the user already knows how to create a Git remote. No guidance for Git beginners or for platform-specific repo creation.
+**Remaining gap:** No explicit link to a setup guide or step-by-step tutorial. Placeholder text is brief. No platform-specific guidance.
 
 ---
 
@@ -192,7 +190,7 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 
 **Gap:** The description is accurate but assumes familiarity with Git internals. A user won't understand that the plugin manages this folder automatically.
 
-**Mobile note:** Currently shown on mobile (known bug — task #24). Mobile should hide this entirely since Obsidian manages the data directory.
+**Mobile note:** ✅ Fixed — local path field is now conditionally rendered with `if (!isMobilePlatform)` guard (repository.ts:155).
 
 ---
 
@@ -211,12 +209,10 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 - "Can I see the encrypted files before I commit?"
 
 **Current behavior:**
-- No explanation in settings about what push/pull does
-- No mention that `git-remote-crypto` encrypts on push and decrypts on pull
-- No "first-time warning" or educational banner
-- The plugin has no UI for push/pull triggers (ribbon icon is empty — task #25)
+- Advanced settings now includes a "How sync works" callout (advanced.ts:22-26) — explains that `git-remote-crypto` encrypts on push and decrypts on pull
+- Callout mentions the remote will contain only ciphertext and warns about backing up before first sync
 
-**Gap:** The user has no idea that every file in the vault will be encrypted during transit. This is the most anxiety-inducing moment for a new user.
+**Remaining gap:** The callout is at the top of the Advanced section, not near the push/pull toggles where the anxiety point is. The plugin has no UI for push/pull triggers (ribbon icon is empty — task #25).
 
 ---
 
@@ -231,10 +227,10 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 
 **Current behavior:**
 - Toggle says "Auto pull on start" but doesn't explain *what* it pulls or from where
-- No mention that the pull direction also decrypts
+- "How sync works" callout in Advanced section explains pull decryption
 - No handling of empty remote (first pull into empty repo)
 
-**Gap:** Same educational gap as push — the user doesn't know that the remote-side transport layer handles encryption transparently.
+**Remaining gap:** Same educational gap as push — the callout is not near the toggle itself, so a user focused on the pull toggle might not see it.
 
 ---
 
@@ -253,12 +249,13 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 - "Why are there three different sources?"
 
 **Current behavior:**
-- Dropdown shows "Keychain / File / Manual" but no explanation of *why*
-- "Zero-knowledge" concept is not mentioned anywhere in the UI
-- No link to security documentation
-- The most secure option (keychain) is described by technical term ("System Keychain") not by benefit ("encrypted by your OS, never exposed")
+- Info callout rendered at top of master key section (masterKey.ts:25-29) — explains zero-knowledge model
+- Dropdown options now describe benefits:
+  - Keychain: "stored in your OS's encrypted credential vault (macOS Keychain / Windows Credential Manager / Linux Secret Service)"
+  - File: "read from an external file on your computer"
+  - Manual: "type or paste the hex key directly"
 
-**Gap:** Critical trust-building information is missing. The user needs to understand the security model before creating/entering a key.
+**Remaining gap:** No explicit "recommended" indicator for keychain. No link to security documentation.
 
 ---
 
@@ -272,13 +269,108 @@ User starts on **Desktop**, configures everything (keychain, SSH auto-detect, et
 - Manual: "Manual" — no reassurance about security
 
 **Current behavior:**
-- Dropdown options are technical labels, not user-friendly descriptions
-- No "recommended" indicator
-- No comparison table or decision guidance
+- Dropdown options now include benefit descriptions (masterKey.ts:61-73):
+  - Keychain: "System Keychain — stored in your OS's encrypted credential vault (macOS Keychain / Windows Credential Manager / Linux Secret Service)"
+  - File: "Key File — read from an external file on your computer"
+  - Manual: "Enter Manually — type or paste the hex key directly"
+- "How encryption works" callout above explains zero-knowledge model
 
-**Gap:** The three options should be presented with clear benefits/trade-offs:
-- Keychain: "Most secure — stored in your OS's encrypted vault"
-- File: "Portable — stored as a file in your vault"
-- Manual: "Always available — you type it each time"
+**Remaining gap:** No "recommended" indicator. No comparison table. On mobile, only Manual is available but no explanation why (no keychain on mobile).
 
-**Mobile note:** On mobile, only Manual is available. The dropdown is hidden. User should understand *why* (no keychain on mobile).
+---
+
+## 10. Migration: Unencrypted Repository → Encrypted
+
+### Scenario 10a: "I already have a repo with notes — how do I migrate it to encrypted format?"
+
+**Path:** `Obsidian → Settings → Git Encrypt`
+
+**Context:** The user already has a Git repository (on GitHub/GitLab or self-hosted) containing plain-text notes. They installed Git Encrypt and want all future push/pull operations to be encrypted.
+
+**User questions:**
+- "Will my notes on the server stay in plain text? Will anyone be able to read them?"
+- "If I push, will the notes be encrypted on the server while remaining plain on my machine?"
+- "How do I encrypt the existing notes on the server?"
+- "Can I undo if I encrypt the wrong thing?"
+
+**What actually happens:**
+
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | Configure URL → `https://github.com/user/existing-repo.git`, enter master key | Settings saved |
+| 2 | First **push** | All local notes are **encrypted** and sent to the server. Server stores encrypted files. **Local notes remain in plain text** — this is not a `commit`, it's a push of encrypted blobs via `git-remote-crypto` |
+| 3 | First **pull** (from another device, or after push) | Server sends encrypted files → `git-remote-crypto` **decrypts** → local notes become encrypted versions |
+
+**Problem:** After step 2 the user is in an inconsistent state:
+- Locally — plain notes
+- On server — encrypted notes
+- Next pull on the same device — plain notes overwritten by encrypted ones (merge conflict)
+
+**Current behavior:**
+- Conflict resolution dropdown (Section 5): `ask` / `abort` / `theirs` / `ours` — but the user doesn't know which to pick
+- No migration warning in settings UI
+- No instructions on "how to safely migrate an existing repo to encrypted format"
+
+**Recommended workflow (should be shown in UI):**
+1. Make a backup of the local vault
+2. Run `git pull` on the existing repo — download all notes locally in plain text
+3. Configure Git Encrypt (URL, auth, master key)
+4. Run `git push` — notes are encrypted and sent to the server
+5. On a new device: configure Git Encrypt → `git pull` — notes download as encrypted files and are automatically decrypted
+6. **Result:** both local and server — encrypted files
+
+**Remaining gap:** No step-by-step migration wizard in the interface. No warning: "If you connect an existing repository, your local files may be overwritten on pull." No button to "Migrate existing repo to encrypted format."
+
+---
+
+### Scenario 10b: "I have plain notes locally and an empty repo — what happens on first push?"
+
+**Path:** `Obsidian → Settings → Git Encrypt`
+
+**Context:** The user has a new Obsidian vault with plain notes. On GitHub they created an empty repository and connected it in Git Encrypt.
+
+**User questions:**
+- "Will my notes be encrypted on the server?"
+- "Will my notes stay plain on my computer?"
+- "Will I see encrypted files in my file manager?"
+- "If I open a note on my phone, will it decrypt automatically?"
+
+**What actually happens:**
+
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | Configure: URL of empty repo, master key generated | Settings saved |
+| 2 | **Push** (first) | All local `.md` files are encrypted → encrypted blobs sent to server. Local files **do not change** — remain plain `.md`. Server stores encrypted versions |
+| 3 | **Pull** (on the same device) | Server sends encrypted files → `git-remote-crypto` decrypts → overwrites local files with encrypted versions |
+| 4 | **Pull** (on a new device) | Encrypted files download → automatically decrypted → notes are readable |
+
+**Key understanding for the user:**
+- Locally, files **change from plain to encrypted after the first pull**
+- On the server, files are **always encrypted** (handled by `git-remote-crypto` at the Git transport layer)
+- File manager will show encrypted binary content instead of markdown
+- On phone, notes are **readable** only if the key is loaded in keychain or entered manually
+
+**Current behavior:**
+- Callout "How sync works" (advanced.ts) explains encrypt-on-push / decrypt-on-pull
+- Callout "How encryption works" (masterKey.ts) explains zero-knowledge
+- No warning that local files **will become encrypted** after pull
+- No visual hint: "After pull your .md files will become unreadable — this is normal"
+
+**Remaining gap:** No explicit warning: "Your vault will be encrypted — local files will become unreadable without the key. Make sure the key is saved." After pull, the user may panic seeing binary files instead of markdown.
+
+---
+
+## Coverage Summary
+
+| Scenario | Status | Where in document |
+|----------|--------|-------------------|
+| HTTPS setup | ✅ | Section 1, 2 |
+| SSH setup (desktop/mobile) | ✅ | Section 2 |
+| Auto-detect author from Git | ✅ | Section 3 |
+| Three key sources (keychain/file/manual) | ✅ | Section 4, 9 |
+| Keychain migration | ✅ | Section 4, 9 |
+| Desktop → Mobile transition | ✅ | Platform Transition section |
+| "What happens on first push?" | ✅ | Section 8a |
+| "What happens on first pull?" | ✅ | Section 8b |
+| "Existing repo with data — how to encrypt?" | ⬜ | **Scenario 10a (new)** |
+| "Plain notes + empty repo — what happens?" | ⬜ | **Scenario 10b (new)** |

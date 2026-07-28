@@ -69,7 +69,9 @@ graph TD
 > All 5 sections import `createSettingGroup` from `ui.ts` directly (dashed arrows).
 > `authentication.ts`, `author.ts`, `masterKey.ts` call `SystemService` via `plugin.sys` for desktop-only operations (`getGitSshKeyPath`, `getGitGlobalUser`, `saveKeyToKeychain`, `checkMasterKeyFile`).
 > `author.ts`, `masterKey.ts`, `repository.ts`, `advanced.ts` do not import `types.ts`/`defaults.ts` directly — types flow through `main.ts`.
-> `authentication.ts` still imports `Platform` directly from Obsidian (task 11 pending).
+> `author.ts` additionally imports `isValidEmail` from `validators.ts`.
+> `masterKey.ts` additionally imports `isValidHexKey` from `validators.ts`.
+> `authentication.ts` still imports `Platform` directly from Obsidian (line 1) — violates single-import-point rule.
 
 ## Shared vs Platform-Specific
 
@@ -107,4 +109,4 @@ graph TD
 - `platform.ts` is the single import point for `Platform.isMobile`. Sections import `isMobilePlatform` from `platform.ts`.
 - `nodeContext.ts` re-exports `isMobile` from `platform.ts` and wraps it in `getNativeModule()` / `getModule<T>()` for safe Node.js module loading.
 - `getModule<T>()` eliminates repetitive `as T` casts — callers specify the expected interface via the generic parameter.
-- `authentication.ts` still imports `Platform` directly from Obsidian (task 11 pending).
+- **Exception:** `authentication.ts` imports `Platform` directly from obsidian (line 1) instead of `../platform` — violates single-import-point rule (see Verification task 5).

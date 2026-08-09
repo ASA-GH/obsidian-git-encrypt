@@ -1,0 +1,44 @@
+@startuml C4_Context
+!include <C4/C4_Context.puml>
+
+title User Scenarios Context Diagram — Git Encrypt
+
+Person(laptop_user, "Desktop User", "Installs plugin on desktop Obsidian (Windows/macOS/Linux).\nCan use system keychain, SSH keys from git config,\nfile-based master key, auto-detect author from Git config.")
+
+Person(mobile_user, "Mobile User", "Installs plugin on mobile Obsidian (Android/iOS).\nNo keychain, no file picker, no SSH auto-detect.\nAll settings: manual entry only.")
+
+System(plugin, "Git Encrypt Plugin", "Obsidian plugin.\nLifecycle: loadSettings → create SystemService +\nGitRibbon + GitEncryptSettingTab → register()\nPlatform-aware: hides desktop-only features on mobile.")
+
+System(repo, "Remote Git Repository", "GitHub / GitLab / self-hosted Git.\nStores encrypted blobs of vault notes.\nAccessed via git-remote-crypto transport:\nHTTPS (username + token) or SSH (private key).")
+
+Person(repo_admin, "Repository Administrator", "Creates the remote repo.\nDoes NOT initialize with README / .gitignore.\nManages access tokens or SSH keys separately.")
+
+System(keychain, "System Keychain", "Electron safeStorage on desktop.\nEncrypts master key with OS-level security.\nKey is cleared after encryption — no round-trip.\nUnavailable on mobile.")
+
+Person(key_user, "Key Manager", "The same user, acting as key owner.\nGenerates 64-char hex key.\nSaves to keychain / file / manual entry.\nLoses key → data is permanently unreadable.")
+
+Rel(laptop_user, plugin, "Installs and configures\nSettings: repo, auth, key, author, advanced", "")
+Rel(mobile_user, plugin, "Installs and configures\nSettings: manual entry only", "")
+Rel(plugin, repo, "Push encrypted blobs\nPull and decrypt encrypted blobs", "git-remote-crypto")
+Rel(repo_admin, repo, "Creates repo\nManages tokens and keys", "Outside plugin")
+Rel(plugin, keychain, "Encrypt master key\nDecrypt on startup", "safeStorage\nDesktop only")
+Rel(key_user, plugin, "Enters or generates master key\n64-char hex — no validation before pull", "")
+Rel(laptop_user, repo_admin, "Acts as", "")
+Rel(mobile_user, key_user, "Acts as", "")
+
+UpdateElementStyle(laptop_user, $bgColor="#d4e8ff", $borderColor="#0366d6")
+UpdateElementStyle(mobile_user, $bgColor="#ffeec2", $borderColor="#d4a72c")
+UpdateElementStyle(plugin, $bgColor="#e8f5e9", $borderColor="#2e7d32")
+UpdateElementStyle(repo, $bgColor="#f3e5f5", $borderColor="#7b1fa2")
+UpdateElementStyle(repo_admin, $bgColor="#e0f2f1", $borderColor="#00695c")
+UpdateElementStyle(keychain, $bgColor="#fce4ec", $borderColor="#c62828")
+UpdateElementStyle(key_user, $bgColor="#fff3e0", $borderColor="#e65100")
+
+UpdateRelStyle(laptop_user, plugin, $lineColor="#0366d6", $textColor="#333", $lineThickness="2")
+UpdateRelStyle(mobile_user, plugin, $lineColor="#d4a72c", $textColor="#333", $lineThickness="2")
+UpdateRelStyle(plugin, repo, $lineColor="#7b1fa2", $textColor="#333")
+UpdateRelStyle(repo_admin, repo, $lineColor="#00695c", $textColor="#666")
+UpdateRelStyle(plugin, keychain, $lineColor="#c62828", $textColor="#333")
+UpdateRelStyle(key_user, plugin, $lineColor="#e65100", $textColor="#333")
+
+@enduml

@@ -1,0 +1,100 @@
+@startuml C4_Context
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+Title: Context Diagram — Git Encrypt
+
+Person(user, "User", "Desktop or mobile Obsidian user. Configures the plugin, manages keys, triggers Git operations via ribbon icon.")
+
+System(obsidian, "Obsidian", "Desktop or mobile app.\nLoads the Git Encrypt plugin,\nprovides Plugin API, Settings tab,\nRibbon icon area, and Notice system.")
+
+System(repo, "Remote Git Repository", "GitHub / GitLab / self-hosted Git.\nStores encrypted blobs of vault notes.\nAccessed via HTTPS or SSH transport.")
+
+System(keychain, "System Keychain\n/ Credentials", "Electron safeStorage on desktop.\nSecurely encrypts/decrypts the master key.\nNot available on mobile — falls back to manual entry.")
+
+Rel(user, obsidian, "Uses", "")
+Rel(obsidian, plugin, "Hosts as plugin\nLoads via Obsidian plugin system", "")
+Rel(plugin, repo, "Push encrypted blobs\nPull and decrypt encrypted blobs", "git-remote-crypto\nHTTPS / SSH")
+Rel(user, repo, "Creates repo,\nmanages access tokens\nor SSH keys", "Outside plugin")
+Rel(plugin, keychain, "Encrypts master key\nDecrypts on startup", "safeStorage\nDesktop only")
+
+UpdateRelStyle(user, obsidian, $lineColor="#333", $textColor="#333")
+UpdateRelStyle(obsidian, plugin, $lineColor="#555", $textColor="#555")
+UpdateRelStyle(plugin, repo, $lineColor="#0366d6", $textColor="#0366d6")
+UpdateRelStyle(user, repo, $lineColor="#666", $textColor="#666")
+UpdateRelStyle(plugin, keychain, $lineColor="#d73a49", $textColor="#d73a49")
+
+@enduml
+
+@startuml C4_Container
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+Title: Container Diagram — Git Encrypt
+
+System_Ext(obsidian, "Obsidian", "Plugin API: Plugin, PluginSettingTab, Notice, Menu, Platform")
+
+System(plugin, "Git Encrypt Plugin", "src/main.ts\nEntry point. Lifecycle: loadSettings →\ncreate SystemService + GitRibbon +\nGitEncryptSettingTab → register()")
+
+System_Boundary(settings, "Settings UI") {
+    Container(tab, "GitEncryptSettingTab", "src/settings/index.ts\nOrchestrates 5 async section renders.\nOn change → saveSettings() → saveData()", "TypeScript / Obsidian API")
+    Container(repo_section, "Repository Section", "src/settings/sections/repository.ts\nTransport type, URL, branch,\nremote name, local path", "TypeScript / Obsidian API")
+    Container(auth_section, "Authentication Section", "src/settings/sections/authentication.ts\nHTTPS (username/token) or SSH\n(key source, text, path, passphrase, port)", "TypeScript / Obsidian API")
+    Container(author_section, "Author Section", "src/settings/sections/author.ts\nAuthor name/email.\nAuto-detect from Git config (desktop)", "TypeScript / Obsidian API")
+    Container(key_section, "Master Key Section", "src/settings/sections/masterKey.ts\nKey source: keychain / file / manual.\nGenerate, validate, encrypt-to-keychain", "TypeScript / Obsidian API")
+    Container(adv_section, "Advanced Section", "src/settings/sections/advanced.ts\nAuto pull/push, sync interval,\nexclude patterns, conflict action", "TypeScript / Obsidian API")
+    Container(ui_helpers, "UI Helpers", "src/settings/ui.ts\ncreateSettingGroup, renderCallout,\nrenderWarningCallout", "TypeScript / Obsidian API")
+}
+
+System_Boundary(services, "Services") {
+    Container(sys, "SystemService", "src/services/systemService.ts\nexecDesktopCommand, getGitSshKeyPath,\ngetGitGlobalUser, checkMasterKeyFile,\ngenerateAndSaveMasterKeyFile,\nsaveKeyToKeychain, loadKeyFromKeychain,\ngitStatus, gitCommit, gitMerge,\ngitPull, gitPush", "TypeScript / Node.js")
+    Container(crypto_svc, "CryptoGitService", "src/services/cryptoGitService.ts\nCryptoGitManager: lazy-create manager\nfrom git-remote-crypto, cache CryptoKey\nand RepoProfile (HTTPS / SSH)\ncryptoPull, cryptoPush, cryptoStatus,\ncryptoCommit", "TypeScript / git-remote-crypto")
+    Container(node_ctx, "NodeContext", "src/services/nodeContext.ts\ngetNativeModule, getModule<T>\nSafe Node/Electron module loading\nwith mobile guards (returns null)", "TypeScript / Node.js / Electron")
+}
+
+System_Boundary(ui, "UI") {
+    Container(ribbon, "GitRibbon", "src/ui/ribbon.ts\nregister() adds folder-git icon.\nshowGitMenu() → 5 operations:\nStatus, Stage & Commit, Merge,\nPull (Decrypt), Push (Encrypt)\nrunGitOp() wrapper with try/catch", "TypeScript / Obsidian API")
+}
+
+Rel(obsidian, plugin, "Loads and instantiates", "Plugin API")
+Rel(plugin, tab, "Creates and registers", "")
+Rel(plugin, sys, "new SystemService(this)", "")
+Rel(plugin, crypto_svc, "new CryptoGitService()", "")
+Rel(plugin, ribbon, "new GitRibbon(this)\nribbon.register()", "")
+
+Rel(tab, repo_section, "renders", "async")
+Rel(tab, auth_section, "renders", "async")
+Rel(tab, author_section, "renders", "async")
+Rel(tab, key_section, "renders", "async")
+Rel(tab, adv_section, "renders", "async")
+
+Rel_D(repo_section, ui_helpers, "uses", "")
+Rel_D(auth_section, ui_helpers, "uses", "")
+Rel_D(author_section, ui_helpers, "uses", "")
+Rel_D(key_section, ui_helpers, "uses", "")
+Rel_D(adv_section, ui_helpers, "uses", "")
+
+Rel(auth_section, sys, "getGitSshKeyPath()\ngetGitGlobalUser()", "")
+Rel(author_section, sys, "getGitGlobalUser()", "")
+Rel(key_section, sys, "checkMasterKeyFile()\ngenerateAndSaveMasterKeyFile()\nsaveKeyToKeychain()\nloadKeyFromKeychain()", "")
+
+Rel(sys, node_ctx, "getNativeModule()\ngetModule<T>()", "")
+Rel(sys, crypto_svc, "cryptoPull()\ncryptoPush()\ncryptoStatus()\ncryptoCommit()", "")
+
+Rel_R(ribbon, sys, "gitStatus()\ngitCommit()\ngitMerge()\ngitPull()\ngitPush()", "")
+Rel_R(ribbon, crypto_svc, "cryptoStatus()\ncryptoCommit()\ncryptoPull()\ncryptoPush()", "")
+
+Rel_L(plugin, obsidian, "reads Platform.isMobile\naccesses Notice, Menu, Setting", "")
+
+UpdateRelStyle(obsidian, plugin, $lineColor="#555", $textColor="#555")
+UpdateRelStyle(plugin, obsidian, $lineColor="#555", $textColor="#555")
+UpdateRelStyle(plugin, tab, $lineColor="#333", $textColor="#333")
+UpdateRelStyle(plugin, sys, $lineColor="#333", $textColor="#333")
+UpdateRelStyle(plugin, crypto_svc, $lineColor="#333", $textColor="#333")
+UpdateRelStyle(plugin, ribbon, $lineColor="#333", $textColor="#333")
+UpdateRelStyle(ribbon, sys, $lineColor="#0366d6", $textColor="#0366d6")
+UpdateRelStyle(ribbon, crypto_svc, $lineColor="#d73a49", $textColor="#d73a49")
+UpdateRelStyle(auth_section, sys, $lineColor="#6a737d", $textColor="#6a737d")
+UpdateRelStyle(key_section, sys, $lineColor="#6a737d", $textColor="#6a737d")
+UpdateRelStyle(sys, node_ctx, $lineColor="#666", $textColor="#666")
+UpdateRelStyle(sys, crypto_svc, $lineColor="#666", $textColor="#666")
+
+@enduml

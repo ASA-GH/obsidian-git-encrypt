@@ -5,6 +5,8 @@ import {
 	DEFAULT_SETTINGS,
 } from "./settings";
 import { SystemService } from "./services/systemService";
+import { getCryptoGitService } from "./services/cryptoGitService";
+import { GitRibbon } from "./ui/ribbon";
 
 /**
  * Main entry point for the Git Encrypt Obsidian plugin.
@@ -13,13 +15,15 @@ import { SystemService } from "./services/systemService";
  */
 export default class GitEncryptPlugin extends Plugin {
 	/** Active plugin configuration state */
-	settings: GitEncryptSettings;
+	settings!: GitEncryptSettings;
 
 	/** Managed UI instance for the Obsidian settings tab view */
-	settingsTab: GitEncryptSettingTab;
+	settingsTab!: GitEncryptSettingTab;
 
 	/** Encapsulated business logic service for native OS/NodeJS and cryptographic operations */
-	sys: SystemService;
+	sys!: SystemService;
+
+	ribbon!: GitRibbon;
 
 	/**
 	 * Executes on plugin activation.
@@ -30,9 +34,10 @@ export default class GitEncryptPlugin extends Plugin {
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.sys = new SystemService(this);
+		this.ribbon = new GitRibbon(this);
+		this.ribbon.register();
 		this.settingsTab = new GitEncryptSettingTab(this.app, this);
 		this.addSettingTab(this.settingsTab);
-
 	}
 
 	/**
@@ -80,6 +85,12 @@ export default class GitEncryptPlugin extends Plugin {
 						break;
 				}
 			}
+		}
+
+		// Initialize the crypto Git service with the loaded key (desktop only).
+		if (this.settings.masterKeyHex.trim().length === 64) {
+			const cryptoService = getCryptoGitService();
+			await cryptoService.loadKey(this.settings.masterKeyHex);
 		}
 	}
 

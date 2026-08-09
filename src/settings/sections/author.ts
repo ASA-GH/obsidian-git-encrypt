@@ -34,8 +34,8 @@ export async function renderAuthorSection(
 					.addOption("git", "Use global Git config")
 					.addOption("manual", "Enter manually")
 					.setValue(plugin.settings.authorSource)
-					.onChange(async (val: "git" | "manual") => {
-						plugin.settings.authorSource = val;
+					.onChange(async (val: string) => {
+						plugin.settings.authorSource = val as "git" | "manual";
 						if (val === "git") {
 							const { name, email } =
 								await plugin.sys.getGitGlobalUser();

@@ -1,6 +1,7 @@
 import { App, Setting } from "obsidian";
 import type GitEncryptPlugin from "../../main";
 import { createSettingGroup, renderCallout, renderWarningCallout } from "../ui";
+import type { ConflictAction } from "../types";
 
 /**
  * Renders advanced automation and synchronization settings.
@@ -112,8 +113,8 @@ export async function renderAdvancedSection(
 					"Keep local version and overwrite remote (ours)",
 				)
 				.setValue(plugin.settings.conflictAction)
-				.onChange(async (val: "ask" | "abort" | "theirs" | "ours") => {
-					plugin.settings.conflictAction = val;
+				.onChange(async (val: string) => {
+					plugin.settings.conflictAction = val as ConflictAction;
 					await plugin.saveSettings();
 				}),
 		);

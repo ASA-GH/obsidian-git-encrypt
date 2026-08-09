@@ -60,8 +60,8 @@ export async function renderAuthenticationSection(
 						.addOption("git", "Use key from Git")
 						.addOption("manual", "Enter key manually")
 						.setValue(plugin.settings.sshKeySource)
-						.onChange(async (val: "git" | "manual") => {
-							plugin.settings.sshKeySource = val;
+						.onChange(async (val: string) => {
+							plugin.settings.sshKeySource = val as "git" | "manual";
 							await plugin.saveSettings();
 							await plugin.refreshSettingsTab();
 						}),

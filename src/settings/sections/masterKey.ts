@@ -67,19 +67,19 @@ function renderDesktopKeyOptions(
 			dropdown
 				.addOption(
 					"keychain",
-					"System Keychain — stored in your OS's encrypted credential vault (macOS Keychain / Windows Credential Manager / Linux Secret Service)",
+					"System keychain — stored in your OS's encrypted credential vault (macOS keychain / Windows Credential Manager / Linux Secret Service)",
 				)
 				.addOption(
 					"file",
-					"Key File — read from an external file on your computer",
+					"Key file — read from an external file on your computer",
 				)
 				.addOption(
 					"manual",
-					"Enter Manually — type or paste the hex key directly",
+					"Enter manually — type or paste the hex key directly",
 				)
 				.setValue(plugin.settings.masterKeySource)
-				.onChange(async (val: "keychain" | "file" | "manual") => {
-					plugin.settings.masterKeySource = val;
+				.onChange(async (val: string) => {
+					plugin.settings.masterKeySource = val as "keychain" | "file" | "manual";
 					await plugin.saveSettings();
 					await plugin.refreshSettingsTab();
 				}),

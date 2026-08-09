@@ -3,6 +3,7 @@ import type GitEncryptPlugin from "../../main";
 import { createSettingGroup, renderWarningCallout } from "../ui";
 import { isMobilePlatform } from "../platform";
 import { validateRepositoryUrl } from "../validators";
+import type { TransportType } from "../types";
 
 /**
  * Renders the repository connection settings section.
@@ -24,31 +25,29 @@ export async function renderRepositorySection(
 			itemEl,
 			"Existing repository detected",
 			"You are connecting to a repository that already contains data. Your local vault files may be overwritten on the next pull. Make a backup of your vault before proceeding.",
+			"Migration guide →",
+			"user_scenarios.md#6-migration",
 		);
 	}
 
-	// Re-add encrypted remote explanation when the setup flow is designed.
-	// Hidden for now — the callout only shows when repositoryUrl is empty,
-	// and users who paste a URL first never see it.
-	// if (!plugin.settings.repositoryUrl.trim()) {
-	// 	const infoEl = itemEl.createEl("div", {
-	// 		cls: ["callout", "is-collapsible"],
-	// 		attr: { "data-callout": "info" },
-	// 	});
-	// 	infoEl.createEl("div", { cls: "callout-title" }).createSpan({
-	// 		text: "Encrypted remote repository",
-	// 	});
-	// 	const bodyEl = infoEl.createEl("div", { cls: "callout-content" });
-	// 	bodyEl.createEl("p", {
-	// 		text: "This plugin pushes encrypted blobs to the remote. "
-	// 			+ "Create the repository first, then paste its URL below. "
-	// 			+ "The remote will never contain plaintext notes.",
-	// 	});
-	// 	bodyEl.createEl("a", {
-	// 		href: "https://github.com/antonmedv/obsidian-git-encrypt/blob/main/README.md",
-	// 		text: "Learn more about how encryption works →",
-	// 	});
-	// }
+	// Explain what an encrypted remote repository is — always visible.
+	const infoEl = itemEl.createDiv({
+		cls: ["callout", "is-collapsible"],
+		attr: { "data-callout": "info" },
+	});
+	infoEl.createDiv({ cls: "callout-title" }).createSpan({
+		text: "Encrypted remote repository",
+	});
+	const bodyEl = infoEl.createDiv({ cls: "callout-content" });
+	bodyEl.createEl("p", {
+		text: "This plugin pushes encrypted blobs to the remote. "
+			+ "Create the repository first, then paste its URL below. "
+			+ "The remote will never contain plaintext notes.",
+	});
+	bodyEl.createEl("a", {
+		href: "https://github.com/antonmedv/obsidian-git-encrypt/blob/main/README.md",
+		text: "Learn more about how encryption works →",
+	});
 
 	new Setting(itemEl)
 		.setName("Transport protocol")
@@ -58,8 +57,8 @@ export async function renderRepositorySection(
 				.addOption("https", "HTTPS")
 				.addOption("ssh", "SSH")
 				.setValue(plugin.settings.transportType)
-				.onChange(async (val: "https" | "ssh") => {
-					plugin.settings.transportType = val;
+				.onChange(async (val: string) => {
+					plugin.settings.transportType = val as TransportType;
 					await plugin.saveSettings();
 					await plugin.refreshSettingsTab();
 					// Directly update visible elements in case the tab re-render
@@ -74,19 +73,19 @@ export async function renderRepositorySection(
 			? "SSH address (e.g., git@github.com:user/repo.git)"
 			: "HTTPS address (e.g., https://github.com/user/repo.git)";
 
-	const frag = document.createDocumentFragment();
+	const frag = createFragment();
 	frag.append(urlDesc);
 
 	if (!plugin.settings.repositoryUrl.trim()) {
 		frag.append(document.createTextNode("\n"));
-		const steps = frag.appendChild(document.createElement("div"));
+		const steps = frag.appendChild(createDiv());
 		steps.addClass("list");
 		steps.addClass("list-numbers");
 		steps.appendChild(document.createTextNode("1. "));
-		steps.appendChild(document.createElement("strong")).textContent = "Create a repo on GitHub/GitLab";
+		steps.appendChild(createEl("strong")).textContent = "Create a repo on GitHub/GitLab";
 		steps.appendChild(document.createTextNode("\n"));
 		steps.appendChild(document.createTextNode("2. "));
-		steps.appendChild(document.createElement("strong")).textContent = "Paste the URL here";
+		steps.appendChild(createEl("strong")).textContent = "Paste the URL here";
 	}
 
 	new Setting(itemEl)
@@ -176,11 +175,11 @@ function updateProtocolVisuals(
 		const input = item.querySelector("input");
 		if (!input) continue;
 		const nameEl = item.querySelector(".setting-item-name");
-		if (!nameEl || nameEl.textContent !== "Repository URL") continue;
+		if (nameEl?.textContent !== "Repository URL") continue;
 
 		const descEl = item.querySelector(".setting-item-description");
 		if (descEl) {
-			descEl.innerHTML = isSsh
+			descEl.textContent = isSsh
 				? "SSH address (e.g., git@github.com:user/repo.git)"
 				: "HTTPS address (e.g., https://github.com/user/repo.git)";
 		}

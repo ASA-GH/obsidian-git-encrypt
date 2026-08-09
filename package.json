@@ -5,38 +5,35 @@
 	"description": "Synchronizes notes with GitHub in an encrypted format",
 	"main": "main.js",
 	"type": "module",
-	"packageManager": "npm@11.9.0",
-	"engines": {
-		"node": ">=24.14.0"
-	},
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
-		"lint": "eslint .",
-		"test": "vitest run",
-		"test:watch": "vitest"
+		"lint": "eslint ."
 	},
 	"keywords": [],
 	"license": "MIT",
+	"engines": {
+		"node": "^24.0.0"
+	},
 	"devDependencies": {
-		"@eslint/js": "9.30.1",
+		"@eslint/js": "^9.39.4",
 		"@types/node": "^26.1.2",
 		"esbuild": "0.25.5",
 		"eslint": "^9.39.4",
 		"eslint-config-prettier": "^10.1.8",
-		"eslint-plugin-obsidianmd": "0.1.9",
-		"globals": "14.0.0",
-		"jiti": "2.6.1",
-		"jsdom": "^29.1.1",
+		"eslint-plugin-obsidianmd": "^0.4.0",
+		"globals": "^17.6.0",
+		"jiti": "^2.6.1",
 		"prettier": "^3.8.3",
 		"tslib": "2.4.0",
-		"typescript": "^5.8.3",
-		"typescript-eslint": "8.35.1",
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.59.1",
 		"vitest": "^4.1.10"
 	},
 	"dependencies": {
 		"git-remote-crypto": "file:git-remote-crypto-1.0.0.tgz",
-		"obsidian": "latest"
+		"isomorphic-git": "^1.38.1",
+		"obsidian": "1.13.1"
 	}
 }

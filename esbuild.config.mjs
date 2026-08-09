@@ -1,5 +1,5 @@
 import esbuild from "esbuild";
-import process from "process";
+import process from "node:process";
 import { builtinModules } from 'node:module';
 
 const banner =
@@ -33,7 +33,7 @@ const context = await esbuild.context({
 		"@lezer/lr",
 		...builtinModules],
 	format: "cjs",
-	target: "es2018",
+	target: "node24",
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,

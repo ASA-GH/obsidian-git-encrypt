@@ -1,16 +1,12 @@
-import tseslint from "typescript-eslint";
 import obsidianmd from "eslint-plugin-obsidianmd";
 import globals from "globals";
-import { globalIgnores } from "eslint/config";
+import { defineConfig, globalIgnores } from "eslint/config";
 
-const projectRoot =
-	typeof __dirname === "undefined"
-		? new URL(".", import.meta.url).pathname
-		: __dirname;
+const projectRoot = new URL(".", import.meta.url).pathname;
 
 const obsidianConfigs = obsidianmd.configs?.recommended ?? [];
 
-export default tseslint.config(
+export default defineConfig(
 	{
 		languageOptions: {
 			globals: {
@@ -19,7 +15,7 @@ export default tseslint.config(
 			parserOptions: {
 				projectService: {
 					allowDefaultProject: [
-						"eslint.config.js",
+						"eslint.config.mts",
 						"manifest.json",
 						"vitest.config.ts",
 						"__tests__/repository.test.ts",
@@ -51,7 +47,7 @@ export default tseslint.config(
 		"node_modules",
 		"dist",
 		"esbuild.config.mjs",
-		"eslint.config.js",
+		"eslint.config.mts",
 		"version-bump.mjs",
 		"versions.json",
 		"main.js",

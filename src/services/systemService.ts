@@ -1,5 +1,6 @@
 import type GitEncryptPlugin from "../main";
 import { getModule, isMobile } from "./nodeContext";
+import { getCryptoGitService } from "./cryptoGitService";
 
 /**
  * Minimal interface definition for the native Node.js 'child_process' module.
@@ -91,7 +92,7 @@ export class SystemService {
 		if (!childProcess) return null;
 
 		return new Promise<string | null>((resolve, reject) => {
-			const timer = setTimeout(() => {
+			const timer = window.setTimeout(() => {
 				const error = new Error(
 					`GitEncrypt: execDesktopCommand timed out after ${timeout}ms: ${cmd}`,
 				);
@@ -99,7 +100,7 @@ export class SystemService {
 			}, timeout);
 
 			childProcess.exec(cmd, (err: unknown, stdout: string) => {
-				clearTimeout(timer);
+				window.clearTimeout(timer);
 				if (err) {
 					console.error(
 						`GitEncrypt: execDesktopCommand failed: ${cmd}`,
@@ -347,6 +348,164 @@ export class SystemService {
 		} catch (error) {
 			return classifyKeychainError(error);
 		}
+	}
+
+	/**
+	 * Runs `git status --short` and returns the raw output.
+	 * Each line follows the format `<XY> <path>` where XY is the status codes.
+	 * Only executes on desktop platforms.
+	 */
+	async gitStatus(): Promise<string | null> {
+		return this.execDesktopCommand("git status --short");
+	}
+
+	/**
+	 * Stages all changes and commits with a timestamped message.
+	 * Uses `git add -A` then `git commit -m`.
+	 * Only executes on desktop platforms.
+	 */
+	async gitCommit(): Promise<string | null> {
+		const ts = new Date().toISOString().replace(/[:.]/g, "-");
+		await this.execDesktopCommand("git add -A");
+		return this.execDesktopCommand(
+			`git commit -m "Git Encrypt auto-commit ${ts}"`,
+		);
+	}
+
+	/**
+	 * Merges the specified branch into the current branch.
+	 * Only executes on desktop platforms.
+	 *
+	 * @param branch - Branch to merge (e.g., "main").
+	 */
+	async gitMerge(branch: string): Promise<string | null> {
+		return this.execDesktopCommand(`git merge ${branch}`);
+	}
+
+	/**
+	 * Pulls from the configured remote and branch.
+	 * Only executes on desktop platforms.
+	 */
+	async gitPull(): Promise<string | null> {
+		const remote = this.plugin.settings.remoteName || "origin";
+		const branch = this.plugin.settings.branch || "main";
+		return this.execDesktopCommand(`git pull ${remote} ${branch}`);
+	}
+
+	/**
+	 * Pushes to the configured remote and branch.
+	 * Only executes on desktop platforms.
+	 */
+	async gitPush(): Promise<string | null> {
+		const remote = this.plugin.settings.remoteName || "origin";
+		const branch = this.plugin.settings.branch || "main";
+		return this.execDesktopCommand(`git push ${remote} ${branch}`);
+	}
+
+	/**
+	 * Pulls from remote via git-remote-crypto (encrypted pull + decrypt).
+	 * Returns the crypto result message, or falls back to plain git pull.
+	 * Only executes on desktop platforms.
+	 */
+	async cryptoPull(): Promise<string | null> {
+		if (isMobile) {
+			return this.execDesktopCommand(
+				`git pull ${this.plugin.settings.remoteName || "origin"} ${this.plugin.settings.branch || "main"}`,
+			);
+		}
+
+		const cryptoService = getCryptoGitService();
+		const result = await cryptoService.cryptoPull(this.plugin);
+
+		if (result.success) {
+			return result.message;
+		}
+
+		// Fallback: try plain git pull.
+		try {
+			return await this.execDesktopCommand(
+				`git pull ${this.plugin.settings.remoteName || "origin"} ${this.plugin.settings.branch || "main"}`,
+			);
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Pushes to remote via git-remote-crypto (encrypt + push).
+	 * Returns the crypto result message, or falls back to plain git push.
+	 * Only executes on desktop platforms.
+	 */
+	async cryptoPush(): Promise<string | null> {
+		if (isMobile) {
+			return this.execDesktopCommand(
+				`git push ${this.plugin.settings.remoteName || "origin"} ${this.plugin.settings.branch || "main"}`,
+			);
+		}
+
+		const cryptoService = getCryptoGitService();
+		const result = await cryptoService.cryptoPush(this.plugin);
+
+		if (result.success) {
+			return result.message;
+		}
+
+		// Fallback: try plain git push.
+		try {
+			return await this.execDesktopCommand(
+				`git push ${this.plugin.settings.remoteName || "origin"} ${this.plugin.settings.branch || "main"}`,
+			);
+		} catch {
+			return null;
+		}
+	}
+
+	/**
+	 * Stages all changes and commits via git-remote-crypto.
+	 * Only executes on desktop platforms.
+	 */
+	async cryptoCommit(): Promise<string | null> {
+		if (isMobile) {
+			await this.execDesktopCommand("git add -A");
+			const ts = new Date().toISOString().replace(/[:.]/g, "-");
+			return this.execDesktopCommand(
+				`git commit -m "Git Encrypt auto-commit ${ts}"`,
+			);
+		}
+
+		const cryptoService = getCryptoGitService();
+		const result = await cryptoService.cryptoCommit(this.plugin);
+
+		if (result.success) {
+			return result.output || "";
+		}
+
+		// Fallback: plain git commit.
+		await this.execDesktopCommand("git add -A");
+		const ts = new Date().toISOString().replace(/[:.]/g, "-");
+		return this.execDesktopCommand(
+			`git commit -m "Git Encrypt auto-commit ${ts}"`,
+		);
+	}
+
+	/**
+	 * Gets status of the encrypted repository.
+	 * Only executes on desktop platforms.
+	 */
+	async cryptoStatus(): Promise<string | null> {
+		if (isMobile) {
+			return this.execDesktopCommand("git status --short");
+		}
+
+		const cryptoService = getCryptoGitService();
+		const result = await cryptoService.cryptoStatus();
+
+		if (result.success && result.output) {
+			return result.output;
+		}
+
+		// Fallback: plain git status.
+		return this.execDesktopCommand("git status --short");
 	}
 }
 

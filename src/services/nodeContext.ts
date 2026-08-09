@@ -9,11 +9,18 @@ export { isMobile };
  * @param moduleName - The name of the built-in Node.js or Electron module to load.
  * @returns The resolved module instance object, or null if unavailable.
  */
-export function getNativeModule(
-	moduleName: "fs" | "path" | "os" | "crypto" | "child_process" | "electron",
-): unknown {
+export type NativeModule =
+	| "fs"
+	| "path"
+	| "os"
+	| "crypto"
+	| "child_process"
+	| "electron"
+	| "git-remote-crypto";
+
+export function getNativeModule(moduleName: NativeModule): unknown {
 	if (isMobile) return null;
-	const globalContext = globalThis as Record<string, unknown>;
+	const globalContext = window as unknown as Record<string, unknown>;
 
 	if (typeof globalContext.require !== "function") {
 		return null;
@@ -45,14 +52,6 @@ export function getNativeModule(
  * const path = getModule<PathModule>("path");
  */
 export function getModule<T>(moduleName: string): T | null {
-	const raw = getNativeModule(
-		moduleName as
-			| "fs"
-			| "path"
-			| "os"
-			| "crypto"
-			| "child_process"
-			| "electron",
-	);
+	const raw = getNativeModule(moduleName as NativeModule);
 	return (raw ?? null) as T | null;
 }
